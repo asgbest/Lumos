@@ -99,6 +99,9 @@ public partial class MainWindow : Window
             Opened += async (_, _) => await OpenFolderAsync(last, _ui.LastPhoto is { } p && File.Exists(p) ? p : null);
     }
 
+    /// <summary>Перший запуск зібраного exe — пропозиція ярлика на робочому столі (з тим самим ui.json, що й вікно).</summary>
+    public Task OfferDesktopShortcutAsync() => DesktopShortcut.OfferAsync(this, _ui);
+
     private async void OnOpenClick(object? sender, RoutedEventArgs e) => await PickAndOpenAsync();
 
     private async Task PickAndOpenAsync()

@@ -45,6 +45,7 @@ public partial class App : Application
                     splash.Close();
                     main.Activate();
                     AppUpdate.ShowWhatsNew(args, main);
+                    await main.OfferDesktopShortcutAsync();
                 };
                 main.Show();
             }, DispatcherPriority.Background);
