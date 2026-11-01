@@ -1,4 +1,4 @@
-# Випуск нової версії Lumos для автооновлення (як tools\Publish-App.ps1 у School_projects):
+﻿# Випуск нової версії Lumos для автооновлення (як tools\Publish-App.ps1 у School_projects):
 # 1) піднімає <Version> у Lumos.App.csproj (якщо не -NoBump);
 # 2) перевіряє, що в CHANGELOG.md є розділ «## X.Y.Z — дата» цієї версії (пишемо його ДО публікації);
 # 3) збирає один exe у publish\Lumos;
@@ -78,11 +78,14 @@ if ($NoGit) { return }
 $behind = (& $git -C $root rev-list --count 'HEAD..@{u}').Trim()
 if ($behind -ne '0') { Write-Warning "У origin є нові коміти ($behind) — git пропущено, злийте їх і закомітьте вручну."; return }
 & $git -C $root add -A
-# Опис — файлом: лапки й «|» з історії версій Windows PowerShell ламає в аргументах git.
-$messageFile = Join-Path $env:TEMP 'publish-lumos-commit.txt'
-[IO.File]::WriteAllText($messageFile, "Lumos $version`n`n$body`n", (New-Object System.Text.UTF8Encoding($false)))
-& $git -C $root commit -q -F $messageFile
-if ($LASTEXITCODE -ne 0) { throw 'git commit не вдався' }
+# Нічого не змінилось (-NoBump без нових правок) — лише тег на поточний коміт.
+if (& $git -C $root status --porcelain) {
+    # Опис — файлом: лапки й «|» з історії версій Windows PowerShell ламає в аргументах git.
+    $messageFile = Join-Path $env:TEMP 'publish-lumos-commit.txt'
+    [IO.File]::WriteAllText($messageFile, "Lumos $version`n`n$body`n", (New-Object System.Text.UTF8Encoding($false)))
+    & $git -C $root commit -q -F $messageFile
+    if ($LASTEXITCODE -ne 0) { throw 'git commit не вдався' }
+}
 & $git -C $root tag "Lumos-v$version"
 & $git -C $root push -q origin HEAD --tags
 if ($LASTEXITCODE -ne 0) { throw 'git push не вдався' }
