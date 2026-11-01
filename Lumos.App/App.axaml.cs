@@ -9,8 +9,8 @@ namespace Lumos.App;
 
 public partial class App : Application
 {
-    /// <summary>Скільки щонайменше видно вікно запуску — щоб не «блимало».</summary>
-    private static readonly TimeSpan SplashMinimum = TimeSpan.FromSeconds(1.5);
+    /// <summary>Скільки щонайменше видно вікно запуску — щоб встигли роздивитися заставку з анімованою діафрагмою.</summary>
+    private static readonly TimeSpan SplashMinimum = TimeSpan.FromSeconds(6);
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 

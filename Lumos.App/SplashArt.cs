@@ -127,7 +127,7 @@ public sealed class SplashArt : Control
         /// <param name="time">Секунди від появи заставки.</param>
         public static void Draw(SKCanvas c, double time)
         {
-            // Діафрагма: плавний цикл «відкрита ↔ прикрита» за 2 с (заставку видно ~1,5 с), починає з того вигляду, що був на картинці.
+            // Діафрагма: плавний цикл «відкрита ↔ прикрита» за 2 с (заставку видно щонайменше 6 с — три цикли), починає з того вигляду, що був на картинці.
             const double period = 2.0;
             double phase = Math.Sin(time / period * 2 * Math.PI);
             float open = (float)(0.5 + 0.5 * phase); // 0 — прикрита, 1 — відкрита
