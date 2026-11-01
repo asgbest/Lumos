@@ -36,6 +36,7 @@ public sealed class SeriesStyleDialog : Window
     private readonly Button _suggest = new() { Content = "✨ Запропонувати", Classes = { "accent" }, IsDefault = true, IsEnabled = false };
     private readonly TextBlock _status = new() { FontSize = 12, Foreground = Dim, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _results = new() { Spacing = 10 };
+    private readonly AiWaiting _waiting = new();
     private readonly CheckBox _review = new()
     {
         Content = "Перевіряти результат", IsChecked = true, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
@@ -92,7 +93,11 @@ public sealed class SeriesStyleDialog : Window
                         new TextBlock { Text = about, TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = Dim },
                     },
                 },
-                new ScrollViewer { Margin = new Thickness(0, 12, 0, 0), Content = _results, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled },
+                new Grid
+                {
+                    Margin = new Thickness(0, 12, 0, 0),
+                    Children = { new ScrollViewer { Content = _results, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled }, _waiting },
+                },
             },
         };
 
@@ -149,6 +154,7 @@ public sealed class SeriesStyleDialog : Window
         try
         {
             _status.Text = $"👀 Gemini дивиться на {shown.Count} кадрів…";
+            _waiting.Start();
             var aiKinds = AiMaskTypes.All.Where(t => AiModels.IsInstalled(t.Model)).Select(t => t.Kind).ToList();
             string system = AiSeries.SystemInstruction(aiKinds, Looks, shown.Count);
             // Яскравість кадрів вирівнюємо самі — Gemini бачить уже вирівняні кадри й доправляє решту.
@@ -182,6 +188,7 @@ public sealed class SeriesStyleDialog : Window
                 looks = AiSeries.Parse(refined, shown.Count);
             }
 
+            _waiting.Stop();
             for (int i = 0; i < looks.Count; i++)
             {
                 _status.Text = $"Готую прев'ю: стиль {i + 1} з {looks.Count}…";
@@ -196,6 +203,7 @@ public sealed class SeriesStyleDialog : Window
         }
         finally
         {
+            _waiting.Stop();
             _suggest.IsEnabled = _photos.Count >= 2;
         }
     }

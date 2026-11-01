@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -36,6 +36,7 @@ public sealed class AiStyleDialog : Window
     private readonly Button _suggest = new() { Content = "✨ Запропонувати", Classes = { "accent" }, IsDefault = true };
     private readonly TextBlock _status = new() { FontSize = 12, Foreground = Dim, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _results = new() { Spacing = 10 };
+    private readonly AiWaiting _waiting = new();
     private readonly CheckBox _review = new()
     {
         Content = "Перевіряти результат", IsChecked = true, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
@@ -168,7 +169,11 @@ public sealed class AiStyleDialog : Window
                         },
                     },
                 },
-                new ScrollViewer { Margin = new Thickness(0, 12, 0, 0), Content = _results, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled },
+                new Grid
+                {
+                    Margin = new Thickness(0, 12, 0, 0),
+                    Children = { new ScrollViewer { Content = _results, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled }, _waiting },
+                },
             },
         };
 
@@ -219,6 +224,7 @@ public sealed class AiStyleDialog : Window
         var cancel = _cancel.Token;
         _suggest.IsEnabled = false;
         _status.Text = "👀 Gemini дивиться на фото…";
+        _waiting.Start();
         var c = _context;
         string? wish = _wish.Text;
         try
@@ -249,6 +255,7 @@ public sealed class AiStyleDialog : Window
                 suggestions = AiStylist.Parse(refined, c.Current, c.Path);
             }
 
+            _waiting.Stop();
             _status.Text = $"Готую прев'ю {suggestions.Count} варіантів…";
             var kept = LoadHistory(c.Path);
             // Нові — зверху, попередні лишаються нижче.
@@ -277,6 +284,7 @@ public sealed class AiStyleDialog : Window
         }
         finally
         {
+            _waiting.Stop();
             _suggest.IsEnabled = true;
         }
     }

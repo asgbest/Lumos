@@ -468,6 +468,7 @@ public partial class MainWindow
 
         CommitEdits();
         ExportButton.IsEnabled = false;
+        _exportsRunning++; // і між фото вікно не закриється
         int done = 0;
         try
         {
@@ -478,21 +479,13 @@ public partial class MainWindow
                 bool jpeg = Path.GetExtension(item.Path).ToLowerInvariant() is ".jpg" or ".jpeg";
                 string path = UniquePath(Path.Combine(target, baseName + (jpeg ? "-Lumos" : "") + ".jpg"));
                 ActionText.Text = $"Експорт {done + 1} з {items.Count}: {Path.GetFileName(path)}…";
-                try
-                {
-                    await Task.Run(() => JpegExporter.Export(item.Path, settings, path));
-                    done++;
-                }
-                catch (Exception ex)
-                {
-                    ActionText.Text = $"⚠️ {item.Name}: {ex.Message}";
-                    await Task.Delay(1500);
-                }
+                if (await ExportOneAsync(item.Path, settings, path)) done++;
             }
             ActionText.Text = $"✅ Експортовано {done} з {items.Count} у «{Path.GetFileName(target)}»";
         }
         finally
         {
+            _exportsRunning--;
             ExportButton.IsEnabled = _photoPath is not null;
         }
     }

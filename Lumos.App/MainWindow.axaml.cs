@@ -91,6 +91,15 @@ public partial class MainWindow : Window
         KeyDown += OnKeyDown;
         _commitTimer.Tick += (_, _) => CommitEdits();
         Closing += (_, _) => CommitEdits();
+        // Закрили посеред експорту — дочекатися його, інакше JPEG так і не з'явиться.
+        Closing += async (_, e) =>
+        {
+            if (_exportsRunning == 0) return;
+            e.Cancel = true;
+            ActionText.Text = "⏳ Дочекаюсь кінця експорту й закрию програму…";
+            while (_exportsRunning > 0) await Task.Delay(200);
+            Close();
+        };
 
         // Файл із командного рядка — відкрити його (разом із його папкою); інакше — продовжити з минулого разу.
         if (startupFile is not null)
@@ -346,9 +355,40 @@ public partial class MainWindow : Window
         await new AiStyleDialog(context).ShowDialog(this);
     }
 
+    /// <summary>Скільки експортів іще йде — поки їх не закінчено, вікно не закривається (інакше файл не з'явиться).</summary>
+    private int _exportsRunning;
+
+    /// <summary>Експорт одного фото з журналом; помилка — окремим вікном, щоб її не пропустити.</summary>
+    private async Task<bool> ExportOneAsync(string photoPath, DevelopSettings settings, string jpegPath)
+    {
+        _exportsRunning++;
+        try
+        {
+            await Task.Run(() => JpegExporter.Export(photoPath, settings, jpegPath));
+            ExportLog.Write(photoPath, jpegPath, null);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ExportLog.Write(photoPath, jpegPath, ex);
+            ActionText.Text = $"⚠️ Експорт не вдався: {ex.Message}";
+            await Notice.ShowAsync(this, $"⚠️ {Path.GetFileName(photoPath)} не експортовано", ex.Message);
+            return false;
+        }
+        finally
+        {
+            _exportsRunning--;
+        }
+    }
+
     private async Task ExportAsync()
     {
-        if (_photoPath is not { } photoPath || !ExportButton.IsEnabled) return;
+        if (_photoPath is not { } photoPath) return;
+        if (_exportsRunning > 0)
+        {
+            ActionText.Text = "⏳ Ще триває попередній експорт — зачекай, доки він закінчиться";
+            return;
+        }
         CommitEdits();
         if (LibraryList.SelectedItems?.Count > 1)
         {
@@ -379,13 +419,8 @@ public partial class MainWindow : Window
         ActionText.Text = $"Експортую {Path.GetFileName(jpegPath)}…";
         try
         {
-            var settings = _settings.Copy();
-            await Task.Run(() => JpegExporter.Export(photoPath, settings, jpegPath));
-            ActionText.Text = $"✅ Збережено {Path.GetFileName(jpegPath)}";
-        }
-        catch (Exception ex)
-        {
-            ActionText.Text = $"⚠️ Експорт не вдався: {ex.Message}";
+            if (await ExportOneAsync(photoPath, _settings.Copy(), jpegPath))
+                ActionText.Text = $"✅ Збережено {Path.GetFileName(jpegPath)} у «{Path.GetFileName(Path.GetDirectoryName(jpegPath))}»";
         }
         finally
         {

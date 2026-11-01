@@ -10,20 +10,30 @@ namespace Lumos.App;
 /// <summary>
 /// Права половина вікна запуску: нічне небо, паличка, «Люмос!» — світло в кільці діафрагми, іскри й зоряний пил.
 /// Малюється наживо на потоці рендеру (<see cref="CompositionCustomVisualHandler"/>): діафрагма «дихає» — звужується й
-/// розширюється — навіть поки потік інтерфейсу зайнятий створенням головного вікна.
+/// розширюється — навіть поки потік інтерфейсу зайнятий створенням головного вікна. Той самий малюнок — у вікнах «✨ AI»,
+/// поки чекаємо на Gemini; анімація йде, лише поки малюнок видно.
 /// </summary>
 public sealed class SplashArt : Control
 {
     private CompositionCustomVisual? _visual;
 
+    /// <summary>false — заокруглені лише праві кути (права половина заставки); true — усі.</summary>
+    public bool RoundAllCorners { get; init; }
+
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
         if (ElementComposition.GetElementVisual(this)?.Compositor is not { } compositor) return;
-        _visual = compositor.CreateCustomVisual(new Handler());
+        _visual = compositor.CreateCustomVisual(new Handler(RoundAllCorners));
         ElementComposition.SetElementChildVisual(this, _visual);
         _visual.Size = new Vector(Bounds.Width, Bounds.Height);
-        _visual.SendHandlerMessage(Handler.Start);
+        _visual.SendHandlerMessage(IsVisible ? Handler.Start : Handler.Stop);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsVisibleProperty) _visual?.SendHandlerMessage(IsVisible ? Handler.Start : Handler.Stop);
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -38,7 +48,7 @@ public sealed class SplashArt : Control
         if (_visual is not null) _visual.Size = new Vector(e.NewSize.Width, e.NewSize.Height);
     }
 
-    private sealed class Handler : CompositionCustomVisualHandler
+    private sealed class Handler(bool roundAll) : CompositionCustomVisualHandler
     {
         public static readonly object Start = new(), Stop = new();
         private bool _running;
@@ -66,10 +76,11 @@ public sealed class SplashArt : Control
             var c = lease.SkCanvas;
             var size = EffectiveSize;
             c.Save();
-            // Заокруглені праві кути, як у вікна.
+            // Заокруглені праві кути, як у вікна (або всі — окрема картинка).
             var frame = new SKRoundRect();
             var corner = new SKPoint(12, 12);
-            frame.SetRectRadii(new SKRect(0, 0, (float)size.X, (float)size.Y), [SKPoint.Empty, corner, corner, SKPoint.Empty]);
+            var left = roundAll ? corner : SKPoint.Empty;
+            frame.SetRectRadii(new SKRect(0, 0, (float)size.X, (float)size.Y), [left, corner, corner, left]);
             c.ClipRoundRect(frame, antialias: true);
             // Малюнок задуманий на 860×1000, заповнює рамку (як UniformToFill), по центру.
             float scale = (float)Math.Max(size.X / Art.W, size.Y / Art.H);
