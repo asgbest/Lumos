@@ -2,8 +2,8 @@
 # 1) піднімає <Version> у Lumos.App.csproj (якщо не -NoBump);
 # 2) перевіряє, що в CHANGELOG.md є розділ «## X.Y.Z — дата» цієї версії (пишемо його ДО публікації);
 # 3) збирає один exe у publish\Lumos;
-# 4) викладає його релізом «Lumos-vX.Y.Z» у репозиторій asgbest/Lumos (з описом із CHANGELOG);
-# 5) комітить код (git add -A), ставить тег Lumos-vX.Y.Z і пушить (-NoGit — без цього кроку).
+# 4) комітить код (git add -A), ставить тег Lumos-vX.Y.Z і пушить (-NoGit — без цього кроку);
+# 5) викладає exe релізом «Lumos-vX.Y.Z» у репозиторій asgbest/Lumos (з описом із CHANGELOG).
 #   & .\tools\Publish-Lumos.ps1 [-NoBump] [-NoGit]
 param(
     [switch]$NoBump,
@@ -59,6 +59,26 @@ if ($LASTEXITCODE -ne 0) { throw 'Збирання не вдалось' }
 $exe = Join-Path $out 'Lumos.exe'
 if (-not (Test-Path $exe)) { throw "Після збирання немає $exe" }
 
+# Спершу код цієї версії — комітом з тегом (реліз потім ставиться на цей тег). Секрети (токени, ключ Gemini) — у .gitignore.
+if (-not $NoGit) {
+    & $git -C $root fetch -q origin
+    $behind = (& $git -C $root rev-list --count 'HEAD..@{u}').Trim()
+    if ($behind -ne '0') { throw "У origin є нові коміти ($behind) — злийте їх і запустіть знову (-NoBump)." }
+    & $git -C $root add -A
+    # Нічого не змінилось (-NoBump без нових правок) — лише тег на поточний коміт.
+    if (& $git -C $root status --porcelain) {
+        # Опис — файлом: лапки й «|» з історії версій Windows PowerShell ламає в аргументах git.
+        $messageFile = Join-Path $env:TEMP 'publish-lumos-commit.txt'
+        [IO.File]::WriteAllText($messageFile, "Lumos $version`n`n$body`n", (New-Object System.Text.UTF8Encoding($false)))
+        & $git -C $root commit -q -F $messageFile
+        if ($LASTEXITCODE -ne 0) { throw 'git commit не вдався' }
+    }
+    & $git -C $root tag -f "Lumos-v$version"
+    & $git -C $root push -q origin HEAD "refs/tags/Lumos-v$version"
+    if ($LASTEXITCODE -ne 0) { throw 'git push не вдався' }
+    Write-Host "Код закомічено й запушено з тегом Lumos-v$version."
+}
+
 $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$repo/releases" -Headers $headers `
     -ContentType 'application/json; charset=utf-8' `
     -Body ([Text.Encoding]::UTF8.GetBytes((@{ tag_name = "Lumos-v$version"; name = "Lumos $version"; body = $body } | ConvertTo-Json)))
@@ -71,22 +91,3 @@ try {
 }
 finally { Remove-Item $upload -ErrorAction SilentlyContinue }
 Write-Host "Опубліковано Lumos $version — програма оновиться під час наступного запуску."
-
-if ($NoGit) { return }
-# Код цієї версії — комітом з тегом. Секрети (токени, ключ Gemini) — у .gitignore.
-& $git -C $root fetch -q origin
-$behind = (& $git -C $root rev-list --count 'HEAD..@{u}').Trim()
-if ($behind -ne '0') { Write-Warning "У origin є нові коміти ($behind) — git пропущено, злийте їх і закомітьте вручну."; return }
-& $git -C $root add -A
-# Нічого не змінилось (-NoBump без нових правок) — лише тег на поточний коміт.
-if (& $git -C $root status --porcelain) {
-    # Опис — файлом: лапки й «|» з історії версій Windows PowerShell ламає в аргументах git.
-    $messageFile = Join-Path $env:TEMP 'publish-lumos-commit.txt'
-    [IO.File]::WriteAllText($messageFile, "Lumos $version`n`n$body`n", (New-Object System.Text.UTF8Encoding($false)))
-    & $git -C $root commit -q -F $messageFile
-    if ($LASTEXITCODE -ne 0) { throw 'git commit не вдався' }
-}
-& $git -C $root tag "Lumos-v$version"
-& $git -C $root push -q origin HEAD --tags
-if ($LASTEXITCODE -ne 0) { throw 'git push не вдався' }
-Write-Host "Код закомічено й запушено з тегом Lumos-v$version."
