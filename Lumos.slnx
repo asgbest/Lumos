@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Lumos.App/Lumos.App.csproj" />
+  <Project Path="Lumos.Core/Lumos.Core.csproj" />
+</Solution>

@@ -1,0 +1,128 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Lumos.App"
+        x:Class="Lumos.App.MainWindow"
+        Title="Lumos"
+        Icon="/Assets/lumos.ico"
+        Width="1400" Height="880" MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="#1E1E1E"
+        DragDrop.AllowDrop="True">
+  <DockPanel>
+
+    <!-- Верхня панель -->
+    <Border DockPanel.Dock="Top" Background="#262626" Padding="10,6" BorderBrush="#333" BorderThickness="0,0,0,1">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+          <Button x:Name="UndoButton" Content="↶" FontSize="16" Padding="10,2" Click="OnUndoClick" IsEnabled="False" ToolTip.Tip="Скасувати (Ctrl+Z)" />
+          <Button x:Name="RedoButton" Content="↷" FontSize="16" Padding="10,2" Click="OnRedoClick" IsEnabled="False" ToolTip.Tip="Повторити (Ctrl+Y)" />
+          <ToggleButton x:Name="ZoomToggle" Content="🔍 100%" ToolTip.Tip="Масштаб 1:1 (клавіша Z або подвійний клік по фото; тягни мишкою, щоб рухати)" IsEnabled="False" />
+          <ToggleButton x:Name="CropToggle" Content="✂️ Обрізка" ToolTip.Tip="Рамка обрізки на фото (клавіша R; Enter — готово)" IsEnabled="False" />
+          <ToggleButton x:Name="BeforeToggle" Content="👁 До" ToolTip.Tip="Показати фото без правок (клавіша \)" IsEnabled="False" />
+          <ToggleButton x:Name="SplitToggle" Content="◫ Поруч" ToolTip.Tip="«До» і «Після» поруч (клавіша Y)" IsEnabled="False" />
+          <Button x:Name="AiButton" Content="✨ AI" Click="OnAiClick" IsEnabled="False"
+                  ToolTip.Tip="Gemini запропонує, у якій стилістиці обробити це фото, — і накладе вибране (клавіша A)" />
+          <Button x:Name="ResetButton" Content="↺ Скинути все" Click="OnResetClick" IsEnabled="False" />
+          <Button x:Name="ExportButton" Content="📤 Експорт JPEG" Click="OnExportClick" IsEnabled="False" Classes="accent"
+                  ToolTip.Tip="Повна роздільність, найвища якість (Ctrl+E)" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12">
+          <Button Content="📁 Папка" Click="OnOpenFolderClick" ToolTip.Tip="Відкрити папку з фото (Ctrl+Shift+O)" />
+          <Button Content="📂 Фото" Click="OnOpenClick" ToolTip.Tip="Відкрити одне фото: RAW, JPEG, PNG, TIFF, HEIC, WebP (Ctrl+O)" />
+          <ToggleButton x:Name="GridToggle" Content="▦ Сітка" ToolTip.Tip="Усі фото папки сіткою (клавіша G)" IsEnabled="False" />
+          <TextBlock x:Name="FileNameText" VerticalAlignment="Center" Foreground="#D0D0D0" FontWeight="SemiBold" />
+          <TextBlock x:Name="ActionText" VerticalAlignment="Center" Foreground="#9A9A9A" FontSize="12"
+                     MaxWidth="340" TextTrimming="CharacterEllipsis"
+                     ToolTip.Tip="{Binding $self.Text}" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Права панель: гістограма, дані зйомки, повзунки -->
+    <Border DockPanel.Dock="Right" Width="320" Background="#262626" BorderBrush="#333" BorderThickness="1,0,0,0">
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="16,14">
+          <local:HistogramView x:Name="Histogram" Height="110" />
+          <TextBlock x:Name="CameraText" Margin="0,8,0,0" FontSize="12" Foreground="#D0D0D0" TextWrapping="Wrap" />
+          <TextBlock x:Name="ShotText" FontSize="11" Foreground="#909090" TextWrapping="Wrap" />
+          <!-- Коли вибрана маска, усі повзунки нижче редагують її, — про це нагадує ця плашка -->
+          <Border x:Name="MaskBanner" IsVisible="False" Margin="0,10,0,0" Padding="10,8" CornerRadius="6" Background="#2B3D55">
+            <DockPanel>
+              <Button DockPanel.Dock="Right" Content="Готово" FontSize="12" Padding="10,3" VerticalAlignment="Center" Click="OnMaskDoneClick"
+                      ToolTip.Tip="Повернутись до правок усього фото (Esc)" />
+              <TextBlock x:Name="MaskBannerText" TextWrapping="Wrap" FontSize="12" Foreground="#E8F0FF" VerticalAlignment="Center" />
+            </DockPanel>
+          </Border>
+          <StackPanel x:Name="AdjustmentsPanel" Margin="0,6,0,0" />
+          <TextBlock Margin="0,16,0,0" FontSize="11" Foreground="#707070" TextWrapping="Wrap"
+                     Text="Подвійний клік по назві повзунка — скинути його." />
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
+    <!-- Фото зверху, стрічка мініатюр знизу; у режимі «Сітка» мініатюри займають усе місце -->
+    <Grid x:Name="CenterGrid" RowDefinitions="*,Auto">
+      <Border x:Name="PhotoBorder" Background="#121212">
+        <Grid x:Name="PhotoArea" Background="Transparent">
+          <Image x:Name="PhotoView" Stretch="Uniform" Margin="20" RenderOptions.BitmapInterpolationMode="HighQuality" />
+          <local:CropOverlay x:Name="CropView" Margin="20" IsVisible="False" />
+          <local:MaskOverlay x:Name="MaskView" Margin="20" IsVisible="False" />
+          <local:HealOverlay x:Name="HealView" Margin="20" IsVisible="False" />
+          <local:FocusOverlay x:Name="FocusView" Margin="20" IsVisible="False" />
+          <local:GridOverlay x:Name="GridView" Margin="20" IsVisible="False" />
+          <Grid x:Name="SplitLabels" ColumnDefinitions="*,*" Margin="20,4" IsVisible="False" IsHitTestVisible="False" VerticalAlignment="Top">
+            <Border HorizontalAlignment="Center" Background="#B0000000" CornerRadius="4" Padding="10,2">
+              <TextBlock Text="До" Foreground="#E0E0E0" FontSize="12" />
+            </Border>
+            <Border Grid.Column="1" HorizontalAlignment="Center" Background="#B0000000" CornerRadius="4" Padding="10,2">
+              <TextBlock Text="Після" Foreground="#E0E0E0" FontSize="12" />
+            </Border>
+          </Grid>
+          <TextBlock x:Name="StatusText" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     FontSize="15" Foreground="#808080" TextAlignment="Center"
+                     Text="Відкрий папку з фото або перетягни сюди фото чи папку&#10;RAW · JPEG · PNG · TIFF · HEIC · WebP" />
+        </Grid>
+      </Border>
+
+      <Border x:Name="LibraryPanel" Grid.Row="1" Background="#1B1B1B" BorderBrush="#333" BorderThickness="0,1,0,0" IsVisible="False">
+        <DockPanel>
+          <DockPanel DockPanel.Dock="Top" Margin="10,4,10,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+              <Button x:Name="AiSeriesButton" Content="✨ AI для серії" Classes="libraryButton" Click="OnAiSeriesClick"
+                      ToolTip.Tip="Спільний стиль від Gemini для вибраних фото (Ctrl або Shift+клік у стрічці) — серія стане однорідною" />
+              <Button Content="📋 Копіювати правки" Classes="libraryButton" Click="OnCopySettingsClick" ToolTip.Tip="Запам'ятати правки поточного фото, крім обрізки (Ctrl+Shift+C)" />
+              <Button x:Name="PasteButton" Content="📌 Вставити" Classes="libraryButton" Click="OnPasteSettingsClick" IsEnabled="False"
+                      ToolTip.Tip="Накласти скопійовані правки на вибрані фото (Ctrl+Shift+V)" />
+              <ComboBox x:Name="FilterBox" MinWidth="150" FontSize="12" ToolTip.Tip="Показувати лише фото з позначкою чи рейтингом" />
+            </StackPanel>
+            <TextBlock x:Name="LibraryText" VerticalAlignment="Center" FontSize="12" Foreground="#A0A0A0" TextTrimming="CharacterEllipsis" />
+          </DockPanel>
+          <ListBox x:Name="LibraryList" Classes="strip" SelectionMode="Multiple" Background="Transparent"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+            <ListBox.ItemsPanel>
+              <ItemsPanelTemplate>
+                <VirtualizingStackPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="local:PhotoItem">
+                <Grid RowDefinitions="*,Auto" ToolTip.Tip="{Binding Name}">
+                  <Image Source="{Binding Thumbnail}" Stretch="Uniform" Opacity="{Binding ThumbOpacity}"
+                         RenderOptions.BitmapInterpolationMode="HighQuality" />
+                  <Ellipse Width="7" Height="7" Fill="#4DA3FF" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2"
+                           IsVisible="{Binding Edited}" ToolTip.Tip="Є правки" />
+                  <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Background="#B0000000" CornerRadius="3" Padding="3,0" Margin="2"
+                          IsVisible="{Binding HasBadges}">
+                    <TextBlock Text="{Binding Badges}" FontSize="10" Foreground="#FFD54F" />
+                  </Border>
+                  <TextBlock Grid.Row="1" Classes="fileName" Text="{Binding Name}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+    </Grid>
+
+  </DockPanel>
+</Window>

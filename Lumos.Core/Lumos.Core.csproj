@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Ядро Lumos без інтерфейсу: декодування RAW (LibRaw), параметри правок і конвеєр обробки.
+    Окремо від Avalonia, щоб потім так само підключити його до версії для Mac і до тестів.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ComputeSharp" Version="3.2.0" />
+    <PackageReference Include="Sdcb.LibRaw" Version="0.21.1.7" />
+    <PackageReference Include="Sdcb.LibRaw.runtime.win64" Version="0.21.1" />
+    <!-- Звичайні фото: JPEG, PNG, TIFF (і 16-бітні), WebP, HEIC; поворот за EXIF і колірні профілі (Display P3 тощо). -->
+    <PackageReference Include="Magick.NET-Q16-AnyCPU" Version="14.17.2" />
+    <!-- Каталог бібліотеки (рейтинги, позначки) — один файл SQLite у профілі користувача. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <!-- ШІ-маски (небо, об'єкт): нейромережі ONNX на відеокарті через DirectML (будь-яка DirectX 12: NVIDIA, AMD, Intel),
+         з автоматичним резервом на процесорі. DirectML — лише Windows; для Mac буде CoreML. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ключ Gemini (GeminiKey.cs) — лише на ПК, у git його немає. -->
+    <EmbeddedResource Include="gemini-key.txt" LogicalName="Lumos.GeminiKey" Condition="Exists('gemini-key.txt')" />
+  </ItemGroup>
+
+</Project>

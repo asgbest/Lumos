@@ -1,0 +1,25 @@
+# Результати збірки
+bin/
+obj/
+publish/
+
+# Visual Studio / Rider: локальні налаштування
+.vs/
+.idea/
+*.user
+*.suo
+*.rsuser
+
+# Ключ Gemini — вбудовується в збірку з цього файлу (GeminiKey.cs)
+Lumos.Core/gemini-key.txt
+
+# Токен на читання релізів (вбудовується в exe для автооновлення) і токен публікації релізів — лише на ПК
+Lumos.App/update-token.txt
+tools/releases-token.txt
+
+# Python-кеш інструментів
+__pycache__/
+
+# Службові файли Windows
+Thumbs.db
+Desktop.ini

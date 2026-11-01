@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Lumos — редактор RAW-фото (аналог Lightroom), інтерфейс на Avalonia: той самий код потім збереться і для Mac.
+    Запуск із папки Lumos: dotnet run (параметр project = Lumos.App)
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Lumos.App</RootNamespace>
+    <AssemblyName>Lumos</AssemblyName>
+    <Version>0.1.0</Version>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Іконка: паличка з «Люмос»-світлом у кільці діафрагми (джерело — Assets\lumos-1024.png). -->
+    <ApplicationIcon>Assets\lumos.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\lumos.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Lumos.Core\Lumos.Core.csproj" />
+  </ItemGroup>
+
+</Project>

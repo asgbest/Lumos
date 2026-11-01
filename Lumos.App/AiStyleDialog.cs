@@ -1,0 +1,334 @@
+﻿using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Lumos.Core;
+using Thumb = Lumos.Core.Thumb;
+
+namespace Lumos.App;
+
+/// <summary>Що потрібно діалогу «✨ AI» від головного вікна: фото, його прев'ю, поточні правки і як накласти варіант.</summary>
+public sealed record AiStyleContext(Photo Photo, string Path, LinearImage Preview, ToneProfile Profile, DevelopSettings Current,
+    UiState Ui, Action<DevelopSettings, string> Apply);
+
+/// <summary>
+/// «✨ AI-стиліст»: зменшена копія фото й опис можливостей Lumos ідуть у Gemini, той пропонує кілька стилістик
+/// одразу числами повзунків (і маски, де треба), а програма показує кожен варіант прев'ю — клік накладає його на фото.
+/// Ключ API вводиться тут і зберігається зашифрованим лише на цьому комп'ютері.
+/// </summary>
+public sealed class AiStyleDialog : Window
+{
+    private const string KeyName = "gemini-api-key";
+    private const int Looks = 4;
+
+    private static readonly IBrush Text = new SolidColorBrush(Color.Parse("#D8D8D8"));
+    private static readonly IBrush Dim = new SolidColorBrush(Color.Parse("#909090"));
+
+    private readonly AiStyleContext _context;
+    private readonly TextBox _key = new() { PasswordChar = '•', Watermark = "Ключ Gemini API", FontSize = 12 };
+    private readonly TextBox _model = new() { FontSize = 12, Watermark = AiStylist.DefaultModel };
+    private readonly StackPanel _keyPanel = new() { Spacing = 6 };
+    private readonly TextBox _wish = new()
+    {
+        Watermark = "Побажання (необов'язково): «тепло, як на плівку», «драматичне небо», «чорно-біле»…",
+        AcceptsReturn = false, FontSize = 12,
+    };
+    private readonly Button _suggest = new() { Content = "✨ Запропонувати", Classes = { "accent" }, IsDefault = true };
+    private readonly TextBlock _status = new() { FontSize = 12, Foreground = Dim, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+    private readonly StackPanel _results = new() { Spacing = 10 };
+    private readonly CheckBox _review = new()
+    {
+        Content = "Перевіряти результат", IsChecked = true, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
+        [ToolTip.TipProperty] = "Gemini бачить, що реально вийшло, і виправляє числа — помітно краще, але вдвічі довше",
+    };
+    private CancellationTokenSource? _cancel;
+
+    /// <summary>Готовий варіант: те, що показує картка (без мініатюри — її легко перерахувати).</summary>
+    public sealed record Look(string Name, string Description, string? Critique, DevelopSettings Settings, List<string> Skipped);
+
+    /// <summary>
+    /// Варіанти кожного фото зберігаються на диску (%LocalAppData%\Lumos\AiLooks): вікно можна закрити, програму перезапустити —
+    /// вони на місці; нові додаються зверху.
+    /// </summary>
+    private static readonly Dictionary<string, List<Look>> History = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<Look, Thumb> Thumbs = new(ReferenceEqualityComparer.Instance);
+    private const int MaxKept = 16;
+
+    private static string HistoryFile(string photoPath)
+    {
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(
+            System.Text.Encoding.UTF8.GetBytes(System.IO.Path.GetFullPath(photoPath).ToLowerInvariant())));
+        return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lumos", "AiLooks", hash + ".json");
+    }
+
+    private static List<Look> LoadHistory(string photoPath)
+    {
+        if (History.TryGetValue(photoPath, out var kept)) return kept;
+        kept = [];
+        try
+        {
+            string file = HistoryFile(photoPath);
+            if (File.Exists(file)) kept = System.Text.Json.JsonSerializer.Deserialize<List<Look>>(File.ReadAllText(file)) ?? [];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+        return History[photoPath] = kept;
+    }
+
+    private static void SaveHistory(string photoPath, List<Look> kept)
+    {
+        try
+        {
+            string file = HistoryFile(photoPath);
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, System.Text.Json.JsonSerializer.Serialize(kept));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    public AiStyleDialog(AiStyleContext context)
+    {
+        _context = context;
+        Title = "✨ AI-стиліст";
+        Width = 760;
+        Height = 820;
+        MinWidth = 560;
+        MinHeight = 480;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        Background = new SolidColorBrush(Color.Parse("#262626"));
+
+        _model.Text = context.Ui.GeminiModel ?? AiStylist.DefaultModel;
+        _wish.Text = context.Ui.AiWish;
+
+        var saveKey = new Button { Content = "Зберегти ключ", FontSize = 12 };
+        saveKey.Click += (_, _) => SaveKey();
+        var forget = new Button { Content = "Забути ключ", FontSize = 12 };
+        forget.Click += (_, _) =>
+        {
+            SecretStore.Save(KeyName, null);
+            _key.Text = "";
+            _status.Text = "Свій ключ видалено — працює вбудований.";
+        };
+        _keyPanel.Children.Add(new TextBlock
+        {
+            Text = "Програма вже має вбудований ключ Gemini API. Сюди можна вставити свій (створюється на aistudio.google.com/apikey) — " +
+                   "він зберігається зашифрованим лише на цьому комп'ютері й замінює вбудований; «Забути ключ» — повернутися до вбудованого.",
+            TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = Text,
+        });
+        _keyPanel.Children.Add(_key);
+        _keyPanel.Children.Add(new DockPanel
+        {
+            Children =
+            {
+                new TextBlock { Text = "Модель:", FontSize = 12, Foreground = Dim, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) },
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, [DockPanel.DockProperty] = Dock.Right, Margin = new Thickness(8, 0, 0, 0),
+                    Children = { forget, saveKey } },
+                _model,
+            },
+        });
+        _keyPanel.IsVisible = false; // ключ вбудований — панель лише для заміни на свій
+
+        var keyToggle = new Button { Content = "🔑 Ключ", FontSize = 12 };
+        keyToggle.Click += (_, _) => _keyPanel.IsVisible = !_keyPanel.IsVisible;
+        _suggest.Click += async (_, _) => await SuggestAsync();
+        Closing += (_, _) =>
+        {
+            _cancel?.Cancel();
+            _context.Ui.AiWish = _wish.Text;
+            _context.Ui.GeminiModel = string.IsNullOrWhiteSpace(_model.Text) || _model.Text.Trim() == AiStylist.DefaultModel ? null : _model.Text.Trim();
+            _context.Ui.Save();
+        };
+
+        Content = new DockPanel
+        {
+            Margin = new Thickness(18),
+            Children =
+            {
+                new StackPanel
+                {
+                    [DockPanel.DockProperty] = Dock.Top, Spacing = 8,
+                    Children =
+                    {
+                        _keyPanel,
+                        _wish,
+                        new DockPanel
+                        {
+                            Children =
+                            {
+                                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, [DockPanel.DockProperty] = Dock.Left,
+                                    Margin = new Thickness(0, 0, 12, 0), Children = { _suggest, keyToggle, _review } },
+                                _status,
+                            },
+                        },
+                        new TextBlock
+                        {
+                            Text = $"Gemini отримає зменшену копію фото ({AiStylist.ImageSide} px) і дані зйомки, а для перевірки — рендери варіантів " +
+                                   $"({AiStylist.RenderSide} px); з перевіркою відповідь іде ~1–1,5 хв. Варіант накладається на фото " +
+                                   "замість поточних правок (обрізка й прибрані плями лишаються); Ctrl+Z — повернути як було.",
+                            TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = Dim,
+                        },
+                    },
+                },
+                new ScrollViewer { Margin = new Thickness(0, 12, 0, 0), Content = _results, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled },
+            },
+        };
+
+        Opened += async (_, _) => await ShowKeptAsync();
+    }
+
+    /// <summary>Попередні варіанти цього фото — одразу при відкритті вікна.</summary>
+    private async Task ShowKeptAsync()
+    {
+        var c = _context;
+        var kept = LoadHistory(c.Path);
+        if (kept.Count == 0) return;
+        _status.Text = $"Попередні варіанти для цього фото: {kept.Count}. «Запропонувати» — додати нові зверху.";
+        foreach (var look in kept.ToList())
+        {
+            if (!Thumbs.TryGetValue(look, out var thumb))
+                Thumbs[look] = thumb = await Task.Run(() => AiLooks.Render(c.Photo, look.Settings, 300, crop: true));
+            _results.Children.Add(Card(look, thumb));
+        }
+    }
+
+    private bool SaveKey()
+    {
+        string key = _key.Text?.Trim() ?? "";
+        if (key.Length == 0) return SecretStore.Load(KeyName) is { Length: > 0 };
+        try
+        {
+            SecretStore.Save(KeyName, key);
+            _key.Text = "";
+            _keyPanel.IsVisible = false;
+            _status.Text = "🔑 Ключ збережено.";
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _status.Text = $"⚠️ Не вдалося зберегти ключ: {ex.Message}";
+            return false;
+        }
+    }
+
+    private async Task SuggestAsync()
+    {
+        SaveKey();
+        string apiKey = AiStylist.ApiKey(SecretStore.Load(KeyName));
+        string model = string.IsNullOrWhiteSpace(_model.Text) ? AiStylist.DefaultModel : _model.Text.Trim();
+        _cancel?.Cancel();
+        _cancel = new CancellationTokenSource();
+        var cancel = _cancel.Token;
+        _suggest.IsEnabled = false;
+        _status.Text = "👀 Gemini дивиться на фото…";
+        var c = _context;
+        string? wish = _wish.Text;
+        try
+        {
+            // ШІ-маски пропонуємо лише ті, чиї моделі вже є на комп'ютері (без завантажень посеред відповіді).
+            var aiKinds = AiMaskTypes.All.Where(t => AiModels.IsInstalled(t.Model)).Select(t => t.Kind).ToList();
+            string system = AiStylist.SystemInstruction(aiKinds, Looks);
+            byte[] original = await Task.Run(() =>
+            {
+                var (bgra, w, h) = AiLooks.RenderAsShot(c.Path, c.Preview, c.Current, c.Profile, withHeals: true);
+                return AiLooks.ToJpeg(bgra, w, h, AiStylist.ImageSide);
+            }, cancel);
+            string answer = await AiStylist.AskGeminiAsync(apiKey, model, system, AiStylist.UserPrompt(c.Photo, c.Current, wish), original, cancel);
+            var suggestions = AiStylist.Parse(answer, c.Current, c.Path);
+
+            if (_review.IsChecked == true)
+            {
+                // Друге коло: модель бачить, що реально вийшло в нашому рушії, і виправляє числа.
+                _status.Text = $"🎨 Рендерю {suggestions.Count} варіанти й показую їх Gemini для перевірки…";
+                var renders = await Task.Run(() => suggestions.Select(s =>
+                {
+                    var settings = AiLooks.Materialize(s, c.Path, c.Preview, c.Profile, []);
+                    var full = AiLooks.Render(c.Photo, settings, AiStylist.RenderSide, crop: false);
+                    return (s, AiLooks.ToJpeg(full.Bgra, full.Width, full.Height, AiStylist.RenderSide));
+                }).ToList(), cancel);
+                _status.Text = "🧐 Gemini перевіряє результат і виправляє…";
+                string refined = await AiStylist.AskGeminiAsync(apiKey, model, system, AiStylist.RefineParts(original, renders, wish), cancel);
+                suggestions = AiStylist.Parse(refined, c.Current, c.Path);
+            }
+
+            _status.Text = $"Готую прев'ю {suggestions.Count} варіантів…";
+            var kept = LoadHistory(c.Path);
+            // Нові — зверху, попередні лишаються нижче.
+            for (int i = 0; i < suggestions.Count; i++)
+            {
+                var suggestion = suggestions[i];
+                var (settings, thumb, skipped) = await Task.Run(() => Build(suggestion), cancel);
+                var look = new Look(suggestion.Name, suggestion.Description, suggestion.Critique, settings, skipped);
+                Thumbs[look] = thumb;
+                kept.Insert(i, look);
+                _results.Children.Insert(Math.Min(i, _results.Children.Count), Card(look, thumb));
+            }
+            while (kept.Count > MaxKept)
+            {
+                Thumbs.Remove(kept[^1]);
+                kept.RemoveAt(kept.Count - 1);
+                if (_results.Children.Count > kept.Count) _results.Children.RemoveAt(_results.Children.Count - 1);
+            }
+            SaveHistory(c.Path, kept);
+            _status.Text = $"✨ Варіантів: {suggestions.Count} (від {model}). «Застосувати» — і стиль на фото.";
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or System.Text.Json.JsonException or IOException)
+        {
+            _status.Text = $"⚠️ {ex.Message}";
+        }
+        finally
+        {
+            _suggest.IsEnabled = true;
+        }
+    }
+
+    /// <summary>Готові правки варіанта (ШІ-маски рахуються тут же, на цьому комп'ютері) і його мініатюра.</summary>
+    private (DevelopSettings Settings, Thumb Thumb, List<string> Skipped) Build(AiSuggestion suggestion)
+    {
+        var c = _context;
+        var skipped = new List<string>();
+        var settings = AiLooks.Materialize(suggestion, c.Path, c.Preview, c.Profile, skipped);
+        var thumb = AiLooks.Render(c.Photo, settings, 300, crop: true);
+        return (settings, thumb, skipped);
+    }
+
+    private Control Card(Look look, Thumb thumb)
+    {
+        var (name, description, critique, settings, skipped) = look;
+        var apply = new Button { Content = "Застосувати", Classes = { "accent" }, FontSize = 12 };
+        apply.Click += (_, _) =>
+        {
+            // Варіант міг бути зроблений раніше: геометрія, обрізка, латки й розмиття — з фото як воно є зараз.
+            var current = _context.Current;
+            var applied = settings.Copy();
+            applied.CopyGeometryFrom(current);
+            (applied.CropX, applied.CropY, applied.CropW, applied.CropH) = (current.CropX, current.CropY, current.CropW, current.CropH);
+            applied.Heals = current.Heals;
+            (applied.BlurAmount, applied.BlurRange, applied.BlurBokeh) = (current.BlurAmount, current.BlurRange, current.BlurBokeh);
+            (applied.BlurFocusX, applied.BlurFocusY, applied.DepthMap) = (current.BlurFocusX, current.BlurFocusY, current.DepthMap);
+            _context.Apply(applied, name);
+            _status.Text = $"🎨 «{name}» на фото. Можна спробувати інший або закрити вікно.";
+        };
+        var info = new StackPanel { Spacing = 4, Margin = new Thickness(12, 0, 0, 0) };
+        info.Children.Add(new TextBlock { Text = name, FontWeight = Avalonia.Media.FontWeight.SemiBold, FontSize = 14, Foreground = Text, TextWrapping = TextWrapping.Wrap });
+        info.Children.Add(new TextBlock { Text = description, FontSize = 12, Foreground = Text, TextWrapping = TextWrapping.Wrap });
+        if (critique is not null)
+            info.Children.Add(new TextBlock { Text = "🧐 Після перевірки: " + critique, FontSize = 11, Foreground = Dim, TextWrapping = TextWrapping.Wrap });
+        if (settings.Masks.Count > 0)
+            info.Children.Add(new TextBlock
+            {
+                Text = "🖌 Маски: " + string.Join(", ", settings.Masks.Select(m => (AiMaskTypes.Of(m.Kind)?.Icon ?? (m.Kind == MaskKind.Linear ? "▭" : "◯")) + " " + m.Name)),
+                FontSize = 11, Foreground = Dim, TextWrapping = TextWrapping.Wrap,
+            });
+        if (skipped.Count > 0)
+            info.Children.Add(new TextBlock { Text = "Пропущено (немає моделі ШІ): " + string.Join(", ", skipped), FontSize = 11, Foreground = Dim, TextWrapping = TextWrapping.Wrap });
+        info.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0), Children = { apply } });
+
+        var image = new Image { Source = MainWindow.ToBitmap(thumb), Width = 240, Height = 240 * thumb.Height / Math.Max(1, thumb.Width), Stretch = Stretch.Uniform };
+        if (image.Height > 240) (image.Width, image.Height) = (240.0 * thumb.Width / thumb.Height, 240);
+        var row = new DockPanel();
+        DockPanel.SetDock(image, Dock.Left);
+        row.Children.Add(image);
+        row.Children.Add(info);
+        return new Border { Background = new SolidColorBrush(Color.Parse("#2E2E2E")), CornerRadius = new CornerRadius(6), Padding = new Thickness(10), Child = row };
+    }
+}

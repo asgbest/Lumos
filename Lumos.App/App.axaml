@@ -1,0 +1,158 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Lumos.App.App"
+             RequestedThemeVariant="Dark">
+  <Application.Styles>
+    <FluentTheme />
+
+    <!-- Компактні повзунки, як у панелі «Редагування» Lightroom. -->
+    <Style Selector="Slider">
+      <Setter Property="Margin" Value="0,-6,0,-2" />
+    </Style>
+    <!-- Перемикач інструмента: увімкнений — помітно синій -->
+    <Style Selector="ToggleButton.tool:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#2F6FB5" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="ToggleButton.tool:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#3A7FC8" />
+    </Style>
+    <Style Selector="Grid.sectionHeader">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Margin" Value="-6,10,-6,2" />
+    </Style>
+    <Style Selector="Grid.sectionHeader:pointerover">
+      <Setter Property="Background" Value="#303030" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="#E0E0E0" />
+      <Setter Property="Margin" Value="6,5" />
+    </Style>
+    <!-- Стрілка секції: ⌄ — розгорнуто, › — згорнуто (поворот із плавною анімацією). -->
+    <Style Selector="Path.chevron">
+      <Setter Property="Stroke" Value="#A0A0A0" />
+      <Setter Property="StrokeThickness" Value="1.6" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="StrokeJoin" Value="Round" />
+      <Setter Property="Width" Value="12" />
+      <Setter Property="Height" Value="7" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="10,0" />
+      <Setter Property="RenderTransform" Value="rotate(0deg)" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Path.chevron.collapsed">
+      <Setter Property="RenderTransform" Value="rotate(-90deg)" />
+    </Style>
+    <Style Selector="Path.chevron.small">
+      <Setter Property="Width" Value="10" />
+      <Setter Property="Height" Value="6" />
+      <Setter Property="StrokeThickness" Value="1.4" />
+      <Setter Property="Margin" Value="2,0,8,0" />
+    </Style>
+
+    <!-- Стилі: заголовок групи і рядок стилю -->
+    <Style Selector="DockPanel.styleGroup">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Margin" Value="0,6,0,2" />
+    </Style>
+    <Style Selector="Button.styleItem">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="20,4,8,4" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="#D8D8D8" />
+      <Setter Property="CornerRadius" Value="3" />
+    </Style>
+    <Style Selector="Button.styleItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#363636" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <Style Selector="Grid.sectionHeader:pointerover Path.chevron">
+      <Setter Property="Stroke" Value="#E0E0E0" />
+    </Style>
+    <!-- Значення повзунка: виглядає як текст, при наведенні й кліку — як поле вводу. -->
+    <Style Selector="TextBox.value">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="#B8B8B8" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Width" Value="60" />
+      <Setter Property="Padding" Value="4,1" />
+      <Setter Property="HorizontalContentAlignment" Value="Right" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.value /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="3" />
+    </Style>
+    <Style Selector="TextBox.value:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="#333333" />
+    </Style>
+    <Style Selector="TextBox.value:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="#161616" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="TextBox.value:disabled /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!-- Бібліотека: стрічка й сітка мініатюр -->
+    <Style Selector="ListBox.strip">
+      <Setter Property="Height" Value="104" />
+    </Style>
+    <Style Selector="ListBox.strip ListBoxItem">
+      <Setter Property="Width" Value="100" />
+      <Setter Property="Height" Value="96" />
+      <Setter Property="Padding" Value="4" />
+      <Setter Property="Margin" Value="1,0" />
+      <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style Selector="ListBox.grid ListBoxItem">
+      <Setter Property="Width" Value="200" />
+      <Setter Property="Height" Value="184" />
+      <Setter Property="Padding" Value="6" />
+      <Setter Property="Margin" Value="3" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Background" Value="#232323" />
+    </Style>
+    <Style Selector="ListBox ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#3A4A5E" />
+    </Style>
+    <Style Selector="ListBox ListBoxItem.current /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="#4DA3FF" />
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+    <Style Selector="TextBlock.fileName">
+      <Setter Property="IsVisible" Value="False" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="#A8A8A8" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+    <Style Selector="ListBox.grid TextBlock.fileName">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="Button.libraryButton">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Padding" Value="8,2" />
+    </Style>
+
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="#B8B8B8" />
+    </Style>
+  </Application.Styles>
+</Application>
