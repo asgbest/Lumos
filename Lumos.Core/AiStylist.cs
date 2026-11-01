@@ -112,8 +112,11 @@ public static class AiStylist
               make the image muddy and dark unless the photo is a night/low-key scene. Prefer correct exposure and white balance first.
             - Color: refine the photo's own palette with the HSL mixer and subtle color grading (typical grading saturation 5…20).
               Avoid heavy hue shifts of natural colors (greens, skin, sky) — at most ±20 hue unless the user asks for a stylized look.
-            - Local masks are the main tool for atmosphere: soft radial glows on the light and the subject, gently darker or calmer
-              edges and sky, warmer/cooler light in parts of the frame; 1–3 per look, soft (feather 60+), believable.
+            - Local masks are the main tool for atmosphere: an adjustment of a concrete object (a car, a person, an animal, a house)
+              goes on a "subject" mask with that object's box — it follows the exact outline, so the object itself gets brighter,
+              warmer or crisper without a halo on the road or the sky around it. Radial masks are for light and air, not objects:
+              a glow where light falls, a pool of light around the subject, gently darker or calmer edges; linear and sky masks
+              for the sky and the ground. 1–3 per look, believable; radial and linear masks soft (feather 60+).
             Respect the user's wishes if given — they override these defaults (including style, strength and black-and-white).
 
             """);
@@ -154,11 +157,15 @@ public static class AiStylist
 
             LOCAL MASKS ("masks" array, 0…3 per look, only when they clearly help):
             - "kind": one of "linear", "radial"{{string.Concat(aiMaskKinds.Select(k => $", \"{KindName(k)}\""))}}.
-              AI kinds are segmented automatically by Lumos (sky, subject = main subject, water, vegetation, mountains, architecture = buildings,
+              AI kinds are segmented automatically by Lumos (sky, subject = one object you point at, water, vegetation, mountains, architecture = buildings,
               natural_ground = earth/sand/field, artificial_ground = roads/floors). Only use AI kinds that are actually present in the photo.
             - Coordinates are fractions 0…1 of the attached image (x from left, y from top).
               linear: full effect at (x1, y1), fading to zero at (x2, y2) — e.g. graduated sky: x1 0.5, y1 0, x2 0.5, y2 0.45.
               radial: ellipse centered at (x1, y1), radius_x/radius_y as fractions of width/height, angle in degrees, feather 0…100.
+              subject: ONE concrete object you point at — its rough bounding box as center (x1, y1) and half width/height
+              (radius_x, radius_y), e.g. a small car in the distance: x1 0.42, y1 0.54, radius_x 0.05, radius_y 0.025. Lumos outlines
+              exactly that object (not the whole box). Without radius_x/radius_y it takes the most prominent object of the frame.
+              Prefer "subject" over a radial whenever the adjustment is about the object itself.
             - "invert": true to affect everything OUTSIDE the mask.
             - "adjustments": the SAME parameter names as global settings but RELATIVE to the global result
               (0 = no extra change; e.g. Exposure −0.4 darkens the masked area by 0.4 EV). Curves, HSL and grading are allowed too.
@@ -347,6 +354,13 @@ public static class AiStylist
                 Kind = kind, X1 = x1, Y1 = y1, RadiusX = Num(m["radius_x"], 0.25, 0.02, 1.5), RadiusY = Num(m["radius_y"], 0.25, 0.02, 1.5),
                 Angle = Num(m["angle"], 0, -180, 180), Feather = Num(m["feather"], 50, 0, 100),
             },
+            // Рамка об'єкта (центр + піврозміри) — Lumos обведе саме його; без рамки — головний об'єкт кадру (RadiusX 0).
+            MaskKind.Subject when m["radius_x"] is not null || m["radius_y"] is not null => new Mask
+            {
+                Kind = kind, X1 = x1, Y1 = y1,
+                RadiusX = Num(m["radius_x"] ?? m["radius_y"], 0.1, 0.01, 0.5), RadiusY = Num(m["radius_y"] ?? m["radius_x"], 0.1, 0.01, 0.5),
+            },
+            MaskKind.Subject => new Mask { Kind = kind, RadiusX = 0, RadiusY = 0 },
             _ => new Mask { Kind = kind },
         };
         var local = new DevelopSettings();

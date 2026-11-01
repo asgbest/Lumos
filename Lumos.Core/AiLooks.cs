@@ -27,10 +27,16 @@ public static class AiLooks
     }
 
     /// <summary>ШІ-маска для кадру: нейромережа → маска-картинка для <see cref="Mask.Raster"/>.</summary>
+    /// <param name="focus">Для «Об'єкта»: приблизна рамка потрібного об'єкта (центр і піврозміри, частки кадру); null — головний об'єкт.</param>
     public static (string Raster, AiSegmenter.Result Result) SegmentAiMask(AiMaskType type, string path, LinearImage preview,
-        DevelopSettings settings, ToneProfile profile)
+        DevelopSettings settings, ToneProfile profile, (double X, double Y, double HalfW, double HalfH)? focus = null)
     {
         var (bgra, w, h) = RenderAsShot(path, preview, settings, profile, withHeals: false);
+        if (focus is { } f && type.Model.Refocus)
+        {
+            var around = AiSegmenter.SegmentAround(type.Model, bgra, w, h, f.X, f.Y, f.HalfW, f.HalfH);
+            return (MaskRaster.Encode(around.Mask, around.Width, around.Height), around);
+        }
         // Той самий кадр — той самий ключ: друга маска «Ландшафту» (напр. рослинність після води) — без нового проходу мережі.
         string key = $"{path}|{RuntimeHelpers.GetHashCode(preview)}|{settings.Rotation}|{settings.FlipH}|{WarpParams.Of(settings)}";
         var r = AiSegmenter.Segment(type.Model, bgra, w, h, type.Channel, key);
@@ -48,7 +54,10 @@ public static class AiLooks
             if (AiMaskTypes.Of(m.Kind) is { } type)
             {
                 if (!AiModels.IsInstalled(type.Model)) { skipped.Add(m.Name); continue; }
-                try { mask = mask with { Raster = SegmentAiMask(type, path, preview, settings, profile).Raster }; }
+                // «Об'єкт» з рамкою від Gemini — саме той об'єкт, який він мав на увазі, а не той, що мережа вважає головним.
+                (double, double, double, double)? focus = m.Kind == MaskKind.Subject && m.Shape.RadiusX > 0
+                    ? (m.Shape.X1, m.Shape.Y1, m.Shape.RadiusX, m.Shape.RadiusY) : null;
+                try { mask = mask with { Raster = SegmentAiMask(type, path, preview, settings, profile, focus).Raster }; }
                 catch (Microsoft.ML.OnnxRuntime.OnnxRuntimeException) { skipped.Add(m.Name); continue; }
             }
             masks.Add(mask);

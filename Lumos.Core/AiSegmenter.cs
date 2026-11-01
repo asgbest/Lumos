@@ -101,15 +101,36 @@ public static class AiSegmenter
                 }
         if (x1 < 0) return; // об'єкта не знайдено
         int extent = Math.Max(x1 - x0, y1 - y0) + 1;
-        int side = Math.Min(Math.Min(w, h), Math.Max(128, extent * 3));
         // Об'єкт і так великий — ділянка майже як кадр, другий прохід нічого не додасть.
-        if (side > Math.Max(w, h) / 2) return;
-        int rx = Math.Clamp((x0 + x1) / 2 - side / 2, 0, w - side), ry = Math.Clamp((y0 + y1) / 2 - side / 2, 0, h - side);
+        if (Math.Min(Math.Min(w, h), Math.Max(128, extent * 3)) > Math.Max(w, h) / 2) return;
+        SegmentInto(model, mask, bgra, w, h, (x0 + x1) / 2, (y0 + y1) / 2, extent);
+    }
+
+    /// <summary>
+    /// Конкретний об'єкт за приблизною рамкою (напр. від Gemini: «авто — тут»): мережа дивиться лише на ділянку навколо
+    /// рамки й обводить те, що в її центрі. Поза ділянкою маска порожня — інші об'єкти кадру не зачіпаються.
+    /// </summary>
+    /// <param name="cx">Центр рамки, частка ширини кадру.</param>
+    /// <param name="halfW">Половина ширини рамки, частка ширини кадру.</param>
+    public static Result SegmentAround(AiModel model, byte[] bgra, int width, int height, double cx, double cy, double halfW, double halfH)
+    {
+        var watch = Stopwatch.StartNew();
+        var mask = new float[width * height];
+        int extent = (int)Math.Max(2 * halfW * width, 2 * halfH * height) + 1;
+        SegmentInto(model, mask, bgra, width, height, (int)(cx * width), (int)(cy * height), extent);
+        return new Result(mask, width, height, SessionFor(model).Gpu, watch.ElapsedMilliseconds, mask.Max());
+    }
+
+    /// <summary>Мережа на квадраті навколо (centerX, centerY), де об'єкт розміром extent займає третину, — і назад у mask з м'яким краєм.</summary>
+    private static void SegmentInto(AiModel model, float[] mask, byte[] bgra, int w, int h, int centerX, int centerY, int extent)
+    {
+        int side = Math.Min(Math.Min(w, h), Math.Max(128, extent * 3));
+        int rx = Math.Clamp(centerX - side / 2, 0, w - side), ry = Math.Clamp(centerY - side / 2, 0, h - side);
         var crop = new byte[side * side * 4];
         for (int y = 0; y < side; y++) Buffer.BlockCopy(bgra, ((ry + y) * w + rx) * 4, crop, y * side * 4, side * 4);
         var (local, _) = SegmentOnce(model, crop, side, side, 0, null);
 
-        // Ближче до краю ділянки — більше від першого проходу: без шва.
+        // Ближче до краю ділянки — більше від того, що було в mask (перший прохід чи порожньо): без шва.
         float feather = Math.Max(4, side / 10);
         Parallel.For(0, side, y =>
         {
