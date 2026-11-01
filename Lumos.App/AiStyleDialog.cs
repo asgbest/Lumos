@@ -54,6 +54,7 @@ public sealed class AiStyleDialog : Window
     private static readonly Dictionary<string, List<Look>> History = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<Look, Thumb> Thumbs = new(ReferenceEqualityComparer.Instance);
     private const int MaxKept = 16;
+    private const int MaxReviews = 2; // кіл перевірки: друге — лише якщо вимірювання ще бачать огріхи
 
     private static string HistoryFile(string photoPath)
     {
@@ -163,7 +164,7 @@ public sealed class AiStyleDialog : Window
                         new TextBlock
                         {
                             Text = $"Gemini отримає зменшену копію фото ({AiStylist.ImageSide} px) і дані зйомки, а для перевірки — рендери варіантів " +
-                                   $"({AiStylist.RenderSide} px); з перевіркою відповідь іде ~1–1,5 хв. Варіант накладається на фото " +
+                                   $"({AiStylist.RenderSide} px) з вимірюваннями; з перевіркою відповідь іде ~1–2 хв. Варіант накладається на фото " +
                                    "замість поточних правок (обрізка й прибрані плями лишаються); Ctrl+Z — повернути як було.",
                             TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = Dim,
                         },
@@ -232,27 +233,40 @@ public sealed class AiStyleDialog : Window
             // ШІ-маски пропонуємо лише ті, чиї моделі вже є на комп'ютері (без завантажень посеред відповіді).
             var aiKinds = AiMaskTypes.All.Where(t => AiModels.IsInstalled(t.Model)).Select(t => t.Kind).ToList();
             string system = AiStylist.SystemInstruction(aiKinds, Looks);
-            byte[] original = await Task.Run(() =>
+            var (original, originalMetrics) = await Task.Run(() =>
             {
                 var (bgra, w, h) = AiLooks.RenderAsShot(c.Path, c.Preview, c.Current, c.Profile, withHeals: true);
-                return AiLooks.ToJpeg(bgra, w, h, AiStylist.ImageSide);
+                return (AiLooks.ToJpeg(bgra, w, h, AiStylist.ImageSide), LookMetrics.Measure(bgra, w, h));
             }, cancel);
             string answer = await AiStylist.AskGeminiAsync(apiKey, model, system, AiStylist.UserPrompt(c.Photo, c.Current, wish), original, cancel);
             var suggestions = AiStylist.Parse(answer, c.Current, c.Path);
 
             if (_review.IsChecked == true)
             {
-                // Друге коло: модель бачить, що реально вийшло в нашому рушії, і виправляє числа.
-                _status.Text = $"🎨 Рендерю {suggestions.Count} варіанти й показую їх Gemini для перевірки…";
-                var renders = await Task.Run(() => suggestions.Select(s =>
+                // Перевірка: модель бачить, що реально вийшло в нашому рушії, і вимірювання кожного рендера (темні третини,
+                // провали, відтінок сірого) — і виправляє числа. Якщо після першого виправлення огріхи лишились — ще одне коло.
+                for (int round = 1; round <= MaxReviews; round++)
                 {
-                    var settings = AiLooks.Materialize(s, c.Path, c.Preview, c.Profile, []);
-                    var full = AiLooks.Render(c.Photo, settings, AiStylist.RenderSide, crop: false);
-                    return (s, AiLooks.ToJpeg(full.Bgra, full.Width, full.Height, AiStylist.RenderSide));
-                }).ToList(), cancel);
-                _status.Text = "🧐 Gemini перевіряє результат і виправляє…";
-                string refined = await AiStylist.AskGeminiAsync(apiKey, model, system, AiStylist.RefineParts(original, renders, wish), cancel);
-                suggestions = AiStylist.Parse(refined, c.Current, c.Path);
+                    _status.Text = round == 1
+                        ? $"🎨 Рендерю {suggestions.Count} варіанти й показую їх Gemini для перевірки…"
+                        : "📏 Перевіряю виправлені варіанти…";
+                    var current = suggestions;
+                    var renders = await Task.Run(() => current.Select(s =>
+                    {
+                        var settings = AiLooks.Materialize(s, c.Path, c.Preview, c.Profile, []);
+                        var full = AiLooks.Render(c.Photo, settings, AiStylist.RenderSide, crop: false);
+                        return (s, AiLooks.ToJpeg(full.Bgra, full.Width, full.Height, AiStylist.RenderSide),
+                            LookMetrics.Measure(full.Bgra, full.Width, full.Height));
+                    }).ToList(), cancel);
+                    int flawed = renders.Count(r => r.Item3.Problems(originalMetrics).Count > 0);
+                    if (round > 1 && flawed == 0) break;
+                    _status.Text = round == 1
+                        ? "🧐 Gemini перевіряє результат і виправляє…"
+                        : $"🧐 У {flawed} з {renders.Count} варіантів ще є огріхи — Gemini виправляє вдруге…";
+                    string refined = await AiStylist.AskGeminiAsync(apiKey, model, system,
+                        AiStylist.RefineParts(original, originalMetrics, renders, wish), cancel);
+                    suggestions = AiStylist.Parse(refined, c.Current, c.Path);
+                }
             }
 
             _waiting.Stop();

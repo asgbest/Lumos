@@ -188,26 +188,37 @@ public static class AiStylist
     /// Друге коло: модель бачить оригінал і те, що наш рушій реально зробив з кожного її варіанта, — і виправляє числа
     /// (сильніше, де ефект не читається; м'якше, де перебір; маски — туди, куди треба). Без цього вона вгадує наосліп.
     /// </summary>
-    public static List<GeminiPart> RefineParts(byte[] original, IReadOnlyList<(AiSuggestion Look, byte[] Render)> looks, string? wish)
+    /// <param name="originalMetrics">Вимірювання оригіналу — від них рахуються огріхи варіантів (<see cref="LookMetrics.Problems"/>).</param>
+    public static List<GeminiPart> RefineParts(byte[] original, LookMetrics originalMetrics,
+        IReadOnlyList<(AiSuggestion Look, byte[] Render, LookMetrics Metrics)> looks, string? wish)
     {
         var parts = new List<GeminiPart>
         {
             new($"""
                 Here is the original photo (as shot), followed by the ACTUAL renders that Lumos produced from your {looks.Count} looks,
-                each with its intent and the exact JSON you gave. Mask coordinates refer to these full, uncropped images.
+                each with its intent, the exact JSON you gave and objective measurements of the render (CIELAB). Mask coordinates
+                refer to these full, uncropped images.
                 {(string.IsNullOrWhiteSpace(wish) ? "" : "User's wishes: " + wish.Trim())}
-                Original:
+                Original — measured: {originalMetrics.Describe()}
                 """),
             new(null, original),
         };
         for (int i = 0; i < looks.Count; i++)
         {
-            var (look, render) = looks[i];
-            parts.Add(new($"Look {i + 1}: «{look.Name}». JSON: {look.Raw.ToJsonString()}\nRender of look {i + 1}:"));
+            var (look, render, metrics) = looks[i];
+            var problems = metrics.Problems(originalMetrics);
+            parts.Add(new($"""
+                Look {i + 1}: «{look.Name}». JSON: {look.Raw.ToJsonString()}
+                Measured: {metrics.Describe()}
+                {(problems.Count == 0 ? "Measured problems: none." : "MEASURED PROBLEMS (must fix):\n- " + string.Join("\n- ", problems))}
+                Render of look {i + 1}:
+                """));
             parts.Add(new(null, render));
         }
         parts.Add(new("""
-            Act as an experienced photo editor reviewing these renders with fresh eyes. For EACH look check:
+            Act as an experienced photo editor reviewing these renders with fresh eyes. The measurements are reliable — trust them
+            over your first impression: fix every MEASURED PROBLEM (a muddy third, crushed blacks, a violet cast on gray roads,
+            clouds or mountains) unless it is unmistakably the purpose of that look. For EACH look also check:
             - Does it look like a natural, well-made photograph? Or does it look over-processed: too dark or muddy, crushed blacks,
               flat gray highlights, halos, HDR look, unnatural hues (cyan greens, orange skin), oversaturation? Fix these first.
             - Is it truly atmospheric — does it convey its mood at thumbnail size? If it reads as a plain correction, build the mood

@@ -76,8 +76,56 @@ public static class AiSegmenter
     /// <returns>Сила маски 0…1 у роздільності кадру.</returns>
     public static Result Segment(AiModel model, byte[] bgra, int width, int height, int channel = 0, string? cacheKey = null)
     {
-        var (session, gpu) = SessionFor(model);
         var watch = Stopwatch.StartNew();
+        var (mask, gpu) = SegmentOnce(model, bgra, width, height, channel, cacheKey);
+        if (model.Refocus) Refocus(model, mask, bgra, width, height);
+        return new Result(mask, width, height, gpu, watch.ElapsedMilliseconds, mask.Max());
+    }
+
+    /// <summary>
+    /// Головний об'єкт буває малим у кадрі (авто вдалині — 5 % ширини): у 1024×1024 на весь кадр мережа бачить його
+    /// кількома десятками пікселів і губить скло, дах, дзеркала, а край розпливається. Тож другий прохід — на квадраті
+    /// навколо знайденого об'єкта (у ньому той займає третину), і результат вклеюється назад із м'яким переходом.
+    /// </summary>
+    private static void Refocus(AiModel model, float[] mask, byte[] bgra, int w, int h)
+    {
+        int x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                if (mask[y * w + x] > 0.5f)
+                {
+                    if (x < x0) x0 = x;
+                    if (x > x1) x1 = x;
+                    if (y < y0) y0 = y;
+                    if (y > y1) y1 = y;
+                }
+        if (x1 < 0) return; // об'єкта не знайдено
+        int extent = Math.Max(x1 - x0, y1 - y0) + 1;
+        int side = Math.Min(Math.Min(w, h), Math.Max(128, extent * 3));
+        // Об'єкт і так великий — ділянка майже як кадр, другий прохід нічого не додасть.
+        if (side > Math.Max(w, h) / 2) return;
+        int rx = Math.Clamp((x0 + x1) / 2 - side / 2, 0, w - side), ry = Math.Clamp((y0 + y1) / 2 - side / 2, 0, h - side);
+        var crop = new byte[side * side * 4];
+        for (int y = 0; y < side; y++) Buffer.BlockCopy(bgra, ((ry + y) * w + rx) * 4, crop, y * side * 4, side * 4);
+        var (local, _) = SegmentOnce(model, crop, side, side, 0, null);
+
+        // Ближче до краю ділянки — більше від першого проходу: без шва.
+        float feather = Math.Max(4, side / 10);
+        Parallel.For(0, side, y =>
+        {
+            for (int x = 0; x < side; x++)
+            {
+                int edge = Math.Min(Math.Min(x, y), Math.Min(side - 1 - x, side - 1 - y));
+                float t = Math.Min(1f, edge / feather);
+                int i = (ry + y) * w + rx + x;
+                mask[i] += (local[y * side + x] - mask[i]) * t;
+            }
+        });
+    }
+
+    private static (float[] Mask, bool Gpu) SegmentOnce(AiModel model, byte[] bgra, int width, int height, int channel, string? cacheKey)
+    {
+        var (session, gpu) = SessionFor(model);
         int size = model.InputSize;
         string? key = cacheKey is null ? null : model.FileName + "|" + cacheKey;
 
@@ -128,7 +176,7 @@ public static class AiSegmenter
                 mask[y * width + x] = SampleFloat(raw, side, side, (x + 0.5) * side / width - 0.5, (y + 0.5) * side / height - 0.5);
         });
         Refine(mask, bgra, width, height);
-        return new Result(mask, width, height, gpu, watch.ElapsedMilliseconds, mask.Max());
+        return (mask, gpu);
     }
 
     /// <summary>

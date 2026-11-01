@@ -4,12 +4,14 @@ namespace Lumos.Core;
 
 /// <summary>
 /// Нейромережа для ШІ-маски: звідки завантажити (null — автоматично не завантажується), скільки важить,
-/// чия й під якою ліцензією. ImageNet — нормалізація входу за статистикою ImageNet; Channels — скільки масок видає за раз.
+/// чия й під якою ліцензією. ImageNet — нормалізація входу за статистикою ImageNet; Channels — скільки масок видає за раз;
+/// Refocus — другий прохід на ділянці навколо знайденого (для малих об'єктів у кадрі).
 /// </summary>
 public sealed record AiModel(string Title, string FileName, string? Url, long ApproxBytes, string? Md5, string License, string Authors, int InputSize)
 {
     public bool ImageNet { get; init; }
     public int Channels { get; init; } = 1;
+    public bool Refocus { get; init; }
 }
 
 /// <summary>
@@ -22,7 +24,7 @@ public static class AiModels
     public static readonly AiModel Subject = new(
         "Виділення об'єкта (IS-Net)", "isnet-general-use.onnx",
         "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx",
-        178_000_000, "fc16ebd8b0c10d971d3513d564d01e29", "Apache-2.0", "Xuebin Qin та ін. (DIS, github.com/xuebinqin/DIS)", 1024);
+        178_000_000, "fc16ebd8b0c10d971d3513d564d01e29", "Apache-2.0", "Xuebin Qin та ін. (DIS, github.com/xuebinqin/DIS)", 1024) { Refocus = true };
 
     /// <summary>U²-Net для неба (xiongzhu666, Sky-Segmentation-and-Post-processing), MIT.</summary>
     public static readonly AiModel Sky = new(
