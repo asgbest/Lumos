@@ -169,7 +169,8 @@ public static class MaskShapes
         double frameW = frame.FrameWidth > 0 ? frame.FrameWidth : width, frameH = frame.FrameHeight > 0 ? frame.FrameHeight : height;
         // Полотно (до обрізки) у пікселях цього зображення: кадр — це його частина CropW × CropH.
         double canvasW = frameW / Math.Max(1e-6, s.CropW), canvasH = frameH / Math.Max(1e-6, s.CropH);
-        double offsetX = s.CropX * canvasW - frame.OffsetX, offsetY = s.CropY * canvasH - frame.OffsetY;
+        // Піксель цього зображення → точка полотна: + зсув обрізки + зсув ділянки в кадрі.
+        double offsetX = s.CropX * canvasW + frame.OffsetX, offsetY = s.CropY * canvasH + frame.OffsetY;
 
         switch (mask.Kind)
         {
