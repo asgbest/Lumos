@@ -17,7 +17,7 @@ public sealed class HealOverlay : Control
     private static readonly IPen ShadowPen = new Pen(new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)), 3);
     private static readonly IPen DashPen = new Pen(Brushes.White, 1.5, new DashStyle([4, 3], 0));
     private static readonly IBrush PinFill = new SolidColorBrush(Color.FromArgb(200, 255, 255, 255));
-    private static readonly IBrush SelectedFill = new SolidColorBrush(Color.Parse("#4DA3FF"));
+    private static readonly IBrush SelectedFill = new SolidColorBrush(Color.Parse("#8F82EE"));
 
     private EquatableList<HealSpot> _heals = EquatableList<HealSpot>.Empty;
     private int _selected = -1;

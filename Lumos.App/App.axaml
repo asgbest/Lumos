@@ -2,6 +2,27 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Lumos.App.App"
              RequestedThemeVariant="Dark">
+  <!--
+    Кольори Lumos — з логотипа: індиго нічного неба (акцент: кнопки, повзунки, вибір) і золото світла палички
+    (дрібні позначки: зірочки, «правлено», ✨ AI). Фон під фото й панелі лишаються нейтрально-сірими, щоб колір
+    навколо не змінював, як сприймаються кольори фото.
+  -->
+  <Application.Resources>
+    <Color x:Key="SystemAccentColor">#6A5AE0</Color>
+    <Color x:Key="SystemAccentColorLight1">#7B6CE8</Color>
+    <Color x:Key="SystemAccentColorLight2">#8F82EE</Color>
+    <Color x:Key="SystemAccentColorLight3">#A89DF3</Color>
+    <Color x:Key="SystemAccentColorDark1">#5747C9</Color>
+    <Color x:Key="SystemAccentColorDark2">#4638AE</Color>
+    <Color x:Key="SystemAccentColorDark3">#372C92</Color>
+    <SolidColorBrush x:Key="LumosGold" Color="#E2AA4C" />
+    <SolidColorBrush x:Key="LumosIndigoLight" Color="#8F82EE" />
+    <!-- Назва «Lumos» — як на заставці: індиго → золото. -->
+    <LinearGradientBrush x:Key="LumosTitle" StartPoint="0%,0%" EndPoint="100%,100%">
+      <GradientStop Color="#8F82EE" Offset="0" />
+      <GradientStop Color="#E2AA4C" Offset="1" />
+    </LinearGradientBrush>
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme />
 
@@ -9,13 +30,23 @@
     <Style Selector="Slider">
       <Setter Property="Margin" Value="0,-6,0,-2" />
     </Style>
-    <!-- Перемикач інструмента: увімкнений — помітно синій -->
+    <!-- Перемикач інструмента: увімкнений — помітне індиго -->
     <Style Selector="ToggleButton.tool:checked /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#2F6FB5" />
+      <Setter Property="Background" Value="#5747C9" />
       <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="ToggleButton.tool:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#3A7FC8" />
+      <Setter Property="Background" Value="#6A5AE0" />
+    </Style>
+    <!-- «✨ AI» — золотом, як світло палички. -->
+    <Style Selector="Button.ai">
+      <Setter Property="Foreground" Value="{StaticResource LumosGold}" />
+      <Setter Property="BorderBrush" Value="#66E2AA4C" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.ai:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="#F2C46E" />
+      <Setter Property="BorderBrush" Value="#E2AA4C" />
     </Style>
     <Style Selector="Grid.sectionHeader">
       <Setter Property="Background" Value="Transparent" />
@@ -128,10 +159,10 @@
       <Setter Property="Background" Value="#232323" />
     </Style>
     <Style Selector="ListBox ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#3A4A5E" />
+      <Setter Property="Background" Value="#3B3768" />
     </Style>
     <Style Selector="ListBox ListBoxItem.current /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="BorderBrush" Value="#4DA3FF" />
+      <Setter Property="BorderBrush" Value="{StaticResource LumosIndigoLight}" />
       <Setter Property="BorderThickness" Value="2" />
     </Style>
     <Style Selector="TextBlock.fileName">

@@ -11,7 +11,7 @@
   <DockPanel>
 
     <!-- Верхня панель -->
-    <Border DockPanel.Dock="Top" Background="#262626" Padding="10,6" BorderBrush="#333" BorderThickness="0,0,0,1">
+    <Border DockPanel.Dock="Top" Background="#24232D" Padding="10,6" BorderBrush="#363449" BorderThickness="0,0,0,1">
       <DockPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
           <Button x:Name="UndoButton" Content="↶" FontSize="16" Padding="10,2" Click="OnUndoClick" IsEnabled="False" ToolTip.Tip="Скасувати (Ctrl+Z)" />
@@ -20,13 +20,15 @@
           <ToggleButton x:Name="CropToggle" Content="✂️ Обрізка" ToolTip.Tip="Рамка обрізки на фото (клавіша R; Enter — готово)" IsEnabled="False" />
           <ToggleButton x:Name="BeforeToggle" Content="👁 До" ToolTip.Tip="Показати фото без правок (клавіша \)" IsEnabled="False" />
           <ToggleButton x:Name="SplitToggle" Content="◫ Поруч" ToolTip.Tip="«До» і «Після» поруч (клавіша Y)" IsEnabled="False" />
-          <Button x:Name="AiButton" Content="✨ AI" Click="OnAiClick" IsEnabled="False"
+          <Button x:Name="AiButton" Content="✨ AI" Click="OnAiClick" IsEnabled="False" Classes="ai"
                   ToolTip.Tip="Gemini запропонує, у якій стилістиці обробити це фото, — і накладе вибране (клавіша A)" />
           <Button x:Name="ResetButton" Content="↺ Скинути все" Click="OnResetClick" IsEnabled="False" />
           <Button x:Name="ExportButton" Content="📤 Експорт JPEG" Click="OnExportClick" IsEnabled="False" Classes="accent"
                   ToolTip.Tip="Повна роздільність, найвища якість (Ctrl+E)" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="12">
+          <TextBlock Text="Lumos" FontSize="19" FontWeight="Bold" LetterSpacing="-0.5" VerticalAlignment="Center" Margin="2,0,4,1"
+                     Foreground="{StaticResource LumosTitle}" />
           <Button Content="📁 Папка" Click="OnOpenFolderClick" ToolTip.Tip="Відкрити папку з фото (Ctrl+Shift+O)" />
           <Button Content="📂 Фото" Click="OnOpenClick" ToolTip.Tip="Відкрити одне фото: RAW, JPEG, PNG, TIFF, HEIC, WebP (Ctrl+O)" />
           <ToggleButton x:Name="GridToggle" Content="▦ Сітка" ToolTip.Tip="Усі фото папки сіткою (клавіша G)" IsEnabled="False" />
@@ -46,11 +48,11 @@
           <TextBlock x:Name="CameraText" Margin="0,8,0,0" FontSize="12" Foreground="#D0D0D0" TextWrapping="Wrap" />
           <TextBlock x:Name="ShotText" FontSize="11" Foreground="#909090" TextWrapping="Wrap" />
           <!-- Коли вибрана маска, усі повзунки нижче редагують її, — про це нагадує ця плашка -->
-          <Border x:Name="MaskBanner" IsVisible="False" Margin="0,10,0,0" Padding="10,8" CornerRadius="6" Background="#2B3D55">
+          <Border x:Name="MaskBanner" IsVisible="False" Margin="0,10,0,0" Padding="10,8" CornerRadius="6" Background="#332F5E">
             <DockPanel>
               <Button DockPanel.Dock="Right" Content="Готово" FontSize="12" Padding="10,3" VerticalAlignment="Center" Click="OnMaskDoneClick"
                       ToolTip.Tip="Повернутись до правок усього фото (Esc)" />
-              <TextBlock x:Name="MaskBannerText" TextWrapping="Wrap" FontSize="12" Foreground="#E8F0FF" VerticalAlignment="Center" />
+              <TextBlock x:Name="MaskBannerText" TextWrapping="Wrap" FontSize="12" Foreground="#ECEAFF" VerticalAlignment="Center" />
             </DockPanel>
           </Border>
           <StackPanel x:Name="AdjustmentsPanel" Margin="0,6,0,0" />
@@ -88,7 +90,7 @@
         <DockPanel>
           <DockPanel DockPanel.Dock="Top" Margin="10,4,10,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
-              <Button x:Name="AiSeriesButton" Content="✨ AI для серії" Classes="libraryButton" Click="OnAiSeriesClick"
+              <Button x:Name="AiSeriesButton" Content="✨ AI для серії" Classes="libraryButton ai" Click="OnAiSeriesClick"
                       ToolTip.Tip="Спільний стиль від Gemini для вибраних фото (Ctrl або Shift+клік у стрічці) — серія стане однорідною" />
               <Button Content="📋 Копіювати правки" Classes="libraryButton" Click="OnCopySettingsClick" ToolTip.Tip="Запам'ятати правки поточного фото, крім обрізки (Ctrl+Shift+C)" />
               <Button x:Name="PasteButton" Content="📌 Вставити" Classes="libraryButton" Click="OnPasteSettingsClick" IsEnabled="False"
@@ -109,11 +111,11 @@
                 <Grid RowDefinitions="*,Auto" ToolTip.Tip="{Binding Name}">
                   <Image Source="{Binding Thumbnail}" Stretch="Uniform" Opacity="{Binding ThumbOpacity}"
                          RenderOptions.BitmapInterpolationMode="HighQuality" />
-                  <Ellipse Width="7" Height="7" Fill="#4DA3FF" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2"
+                  <Ellipse Width="7" Height="7" Fill="{StaticResource LumosGold}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2"
                            IsVisible="{Binding Edited}" ToolTip.Tip="Є правки" />
                   <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Background="#B0000000" CornerRadius="3" Padding="3,0" Margin="2"
                           IsVisible="{Binding HasBadges}">
-                    <TextBlock Text="{Binding Badges}" FontSize="10" Foreground="#FFD54F" />
+                    <TextBlock Text="{Binding Badges}" FontSize="10" Foreground="{StaticResource LumosGold}" />
                   </Border>
                   <TextBlock Grid.Row="1" Classes="fileName" Text="{Binding Name}" />
                 </Grid>

@@ -22,7 +22,7 @@ public sealed class MaskOverlay : Control
     private static readonly IPen SolidPen = new Pen(Brushes.White, 1.5);
     private static readonly IPen ShadowPen = new Pen(new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)), 3);
     private static readonly IPen DashPen = new Pen(Brushes.White, 1, new DashStyle([4, 4], 0));
-    private static readonly IBrush HandleFill = new SolidColorBrush(Color.Parse("#4DA3FF"));
+    private static readonly IBrush HandleFill = new SolidColorBrush(Color.Parse("#8F82EE"));
 
     private Mask? _mask;
     private double _cropX, _cropY, _cropW = 1, _cropH = 1;

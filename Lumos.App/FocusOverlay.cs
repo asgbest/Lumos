@@ -11,7 +11,7 @@ public sealed class FocusOverlay : Control
 {
     private static readonly IPen SolidPen = new Pen(Brushes.White, 1.5);
     private static readonly IPen ShadowPen = new Pen(new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)), 3);
-    private static readonly IBrush Accent = new SolidColorBrush(Color.Parse("#4DA3FF"));
+    private static readonly IBrush Accent = new SolidColorBrush(Color.Parse("#8F82EE"));
 
     private double _cropX, _cropY, _cropW = 1, _cropH = 1, _focusX = -1, _focusY = -1;
     private int _outW = 1, _outH = 1;
