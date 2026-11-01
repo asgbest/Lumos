@@ -442,6 +442,10 @@ public partial class MainWindow : Window
         else if (ctrl && shift && e.Key == Key.V) PasteSettings();
         else if (ctrl && (e.Key == Key.Y || (e.Key == Key.Z && shift))) StepHistory(+1);
         else if (ctrl && e.Key == Key.Z) StepHistory(-1);
+        // Масштаб, як у Lightroom: Ctrl+= ближче, Ctrl+− далі, Ctrl+0 — «вмістити».
+        else if (ctrl && e.Key is Key.OemPlus or Key.Add && ZoomToggle.IsEnabled) StepZoom(+1, null);
+        else if (ctrl && e.Key is Key.OemMinus or Key.Subtract && ZoomToggle.IsEnabled) StepZoom(-1, null);
+        else if (ctrl && e.Key is Key.D0 or Key.NumPad0 && ZoomToggle.IsEnabled) SetZoom(false, null);
         else if (typing || ctrl) return;
         else if (e.Key == Key.R && CropToggle.IsEnabled) SetCropMode(!_cropMode);
         else if (e.Key == Key.Z && ZoomToggle.IsEnabled) SetZoom(!_zoomed, null);
@@ -503,13 +507,14 @@ public partial class MainWindow : Window
                 int highlight = _showMaskOverlay && !split ? _maskIndex : -1; // підсвітити вибрану маску червоним
                 var full = _full;
                 var (centerX, centerY) = (_zoomX, _zoomY);
+                double zoomScale = _zoomScale;
                 var (viewW, viewH) = ZoomViewport();
                 double previewScale = _previewScale;
                 int fullLong = _fullLong;
 
                 var (buffer, width, height) = await Task.Run(() =>
                 {
-                    if (zoomed) return RenderZoomed(full!, settings, profile, centerX, centerY, viewW, viewH, highlight);
+                    if (zoomed) return RenderZoomed(full!, settings, profile, zoomScale, centerX, centerY, viewW, viewH, highlight);
                     var img = GetGeometry(preview, settings, cropMode);
                     var frame = RenderFrame.For(img, previewScale, fullLong);
                     int size = img.Width * img.Height * 4;
@@ -526,14 +531,17 @@ public partial class MainWindow : Window
 
                 if (!zoomed && !split) _buffer = buffer;
                 SplitLabels.IsVisible = split;
-                // У масштабі 100 % піксель зображення = піксель екрана, тож роздільність бітмапа враховує масштаб Windows.
-                double dpi = zoomed ? 96 * RenderScaling : 96;
-                if (_bitmap is null || _bitmap.PixelSize.Width != width || _bitmap.PixelSize.Height != height || _bitmap.Dpi.X != dpi)
+                if (_bitmap is null || _bitmap.PixelSize.Width != width || _bitmap.PixelSize.Height != height)
                 {
-                    _bitmap = new WriteableBitmap(new PixelSize(width, height), new Vector(dpi, dpi),
-                        PixelFormat.Bgra8888, AlphaFormat.Opaque);
+                    _bitmap = new WriteableBitmap(new PixelSize(width, height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
                     PhotoView.Source = _bitmap;
                 }
+                // У масштабі піксель зображення займає рівно max(1, масштаб) пікселів екрана — розмір задаємо явно,
+                // з урахуванням масштабу Windows; інакше — вписати у вікно.
+                double magnify = Math.Max(1, zoomScale) / RenderScaling;
+                PhotoView.Width = zoomed ? width * magnify : double.NaN;
+                PhotoView.Height = zoomed ? height * magnify : double.NaN;
+                PhotoView.Stretch = zoomed ? Avalonia.Media.Stretch.Fill : Avalonia.Media.Stretch.Uniform;
                 using (var fb = _bitmap.Lock())
                 {
                     int rowBytes = width * 4;

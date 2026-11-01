@@ -16,7 +16,7 @@
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
           <Button x:Name="UndoButton" Content="↶" FontSize="16" Padding="10,2" Click="OnUndoClick" IsEnabled="False" ToolTip.Tip="Скасувати (Ctrl+Z)" />
           <Button x:Name="RedoButton" Content="↷" FontSize="16" Padding="10,2" Click="OnRedoClick" IsEnabled="False" ToolTip.Tip="Повторити (Ctrl+Y)" />
-          <ToggleButton x:Name="ZoomToggle" Content="🔍 100%" ToolTip.Tip="Масштаб 1:1 (клавіша Z або подвійний клік по фото; тягни мишкою, щоб рухати)" IsEnabled="False" />
+          <ToggleButton x:Name="ZoomToggle" Content="🔍 100%" ToolTip.Tip="Масштаб: «вмістити» ↔ 100 % (клавіша Z або подвійний клік по фото). Коліщатко — 25–400 % до точки під курсором, Ctrl+= / Ctrl+− — крок, Ctrl+0 — вмістити; тягни мишкою, щоб рухати" IsEnabled="False" />
           <ToggleButton x:Name="CropToggle" Content="✂️ Обрізка" ToolTip.Tip="Рамка обрізки на фото (клавіша R; Enter — готово)" IsEnabled="False" />
           <ToggleButton x:Name="BeforeToggle" Content="👁 До" ToolTip.Tip="Показати фото без правок (клавіша \)" IsEnabled="False" />
           <ToggleButton x:Name="SplitToggle" Content="◫ Поруч" ToolTip.Tip="«До» і «Після» поруч (клавіша Y)" IsEnabled="False" />

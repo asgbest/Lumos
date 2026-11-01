@@ -23,9 +23,11 @@ public sealed class LinearImage
     /// Зменшена копія для швидкого редагування (аналог Smart Preview): довша сторона — не більше <paramref name="maxSide"/>.
     /// Усереднення квадратами в лінійному світлі — так яскравість не спотворюється.
     /// </summary>
-    public LinearImage Downscale(int maxSide)
+    public LinearImage Downscale(int maxSide) => DownscaleBy((int)Math.Ceiling(Math.Max(Width, Height) / (double)maxSide));
+
+    /// <summary>Зменшена рівно в <paramref name="factor"/> разів (масштаби 50 %, 33 %, 25 %).</summary>
+    public LinearImage DownscaleBy(int factor)
     {
-        int factor = (int)Math.Ceiling(Math.Max(Width, Height) / (double)maxSide);
         if (factor <= 1) return this;
 
         int w = Width / factor, h = Height / factor;
