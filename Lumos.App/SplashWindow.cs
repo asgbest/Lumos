@@ -16,7 +16,7 @@ public sealed class SplashWindow : Window
     private static readonly IBrush Ink = new SolidColorBrush(Color.Parse("#14122B"));
     private static readonly IBrush Muted = new SolidColorBrush(Color.Parse("#5C5A70"));
 
-    private readonly TextBlock _status = new() { Text = "Запуск…", FontSize = 11, Foreground = Muted };
+    private readonly TextBlock _status = new() { Text = "Запуск…", FontSize = 11, Foreground = Muted, TextWrapping = TextWrapping.Wrap };
 
     public SplashWindow()
     {

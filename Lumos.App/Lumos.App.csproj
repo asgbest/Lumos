@@ -20,6 +20,10 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\lumos.ico" />
+    <!-- Історія версій — у вікно «Що нового» після автооновлення (Updates\Changelog.cs). -->
+    <EmbeddedResource Include="..\CHANGELOG.md" LogicalName="Lumos.Changelog" />
+    <!-- Токен на читання релізів для автооновлення (Updates\AppUpdate.cs) — лише на ПК, у git його немає. -->
+    <EmbeddedResource Include="update-token.txt" LogicalName="Lumos.UpdateToken" Condition="Exists('update-token.txt')" />
   </ItemGroup>
 
   <ItemGroup>
