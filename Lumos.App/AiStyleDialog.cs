@@ -42,10 +42,18 @@ public sealed class AiStyleDialog : Window
         Content = "Перевіряти результат", IsChecked = true, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
         [ToolTip.TipProperty] = "Gemini бачить, що реально вийшло, і виправляє числа — помітно краще, але вдвічі довше",
     };
+    private readonly CheckBox _pro = new()
+    {
+        Content = "🎓 Pro", FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
+        [ToolTip.TipProperty] = "Як у професіонала: Lumos сам знаходить небо, гори, воду, об'єкт і міряє їх, Gemini складає план обробки " +
+                                "(4–8 локальних кроків — кожен своєю маскою) і що прибрати, а перевірка дивиться ще й на кожну ділянку. ~3 хв",
+    };
     private CancellationTokenSource? _cancel;
 
     /// <summary>Готовий варіант: те, що показує картка (без мініатюри — її легко перерахувати).</summary>
-    public sealed record Look(string Name, string Description, string? Critique, DevelopSettings Settings, List<string> Skipped);
+    /// <param name="Steps">«✨ AI Pro»: кроки плану; Removed і Removals — що прибрано ШІ-видаленням (назви й латки).</param>
+    public sealed record Look(string Name, string Description, string? Critique, DevelopSettings Settings, List<string> Skipped,
+        List<string>? Steps = null, List<string>? Removed = null, EquatableList<HealSpot>? Removals = null);
 
     /// <summary>
     /// Варіанти кожного фото зберігаються на диску (%LocalAppData%\Lumos\AiLooks): вікно можна закрити, програму перезапустити —
@@ -112,6 +120,7 @@ public sealed class AiStyleDialog : Window
 
         _model.Text = context.Ui.GeminiModel ?? AiStylist.DefaultModel;
         _wish.Text = context.Ui.AiWish;
+        _pro.IsChecked = context.Ui.AiPro;
 
         var saveKey = new Button { Content = "Зберегти ключ", FontSize = 12 };
         saveKey.Click += (_, _) => SaveKey();
@@ -148,6 +157,7 @@ public sealed class AiStyleDialog : Window
         {
             _cancel?.Cancel();
             _context.Ui.AiWish = _wish.Text;
+            _context.Ui.AiPro = _pro.IsChecked == true;
             _context.Ui.GeminiModel = string.IsNullOrWhiteSpace(_model.Text) || _model.Text.Trim() == AiStylist.DefaultModel ? null : _model.Text.Trim();
             _context.Ui.Save();
         };
@@ -169,15 +179,16 @@ public sealed class AiStyleDialog : Window
                             Children =
                             {
                                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, [DockPanel.DockProperty] = Dock.Left,
-                                    Margin = new Thickness(0, 0, 12, 0), Children = { _suggest, keyToggle, _review } },
+                                    Margin = new Thickness(0, 0, 12, 0), Children = { _suggest, keyToggle, _review, _pro } },
                                 _status,
                             },
                         },
                         new TextBlock
                         {
                             Text = $"Gemini отримає зменшену копію фото ({AiStylist.ImageSide} px) і дані зйомки, а для перевірки — рендери варіантів " +
-                                   $"({AiStylist.RenderSide} px) з вимірюваннями; з перевіркою відповідь іде ~1–2 хв. Варіант накладається на фото " +
-                                   "замість поточних правок (обрізка й прибрані плями лишаються); Ctrl+Z — повернути як було.",
+                                   $"({AiStylist.RenderSide} px) з вимірюваннями; з перевіркою відповідь іде ~1–2 хв, у режимі 🎓 Pro — ~3 хв " +
+                                   "(ще й карта ділянок і план). Варіант накладається на фото замість поточних правок (обрізка й прибрані плями " +
+                                   "лишаються); Ctrl+Z — повернути як було.",
                             TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = Dim,
                         },
                     },
@@ -242,6 +253,18 @@ public sealed class AiStyleDialog : Window
         string? wish = _wish.Text;
         try
         {
+            if (_pro.IsChecked == true)
+            {
+                var pro = await AiPro.RunAsync(apiKey, model, c.Photo, c.Path, c.Preview, c.Profile, c.Current, wish, Looks,
+                    _review.IsChecked == true, s => _status.Text = s, cancel);
+                var removals = new EquatableList<HealSpot>(pro.Removed.Select(r => r.Spot));
+                await ShowAsync(pro.Looks, model, s => s with
+                {
+                    Steps = pro.Plan.Steps.ToList(), Removed = pro.Removed.Select(r => r.Name).ToList(), Removals = removals,
+                }, cancel);
+                return;
+            }
+
             // ШІ-маски пропонуємо лише ті, чиї моделі вже є на комп'ютері (без завантажень посеред відповіді).
             var aiKinds = AiMaskTypes.All.Where(t => AiModels.IsInstalled(t.Model)).Select(t => t.Kind).ToList();
             string system = AiStylist.SystemInstruction(aiKinds, Looks);
@@ -281,27 +304,7 @@ public sealed class AiStyleDialog : Window
                 }
             }
 
-            _waiting.Stop();
-            _status.Text = $"Готую прев'ю {suggestions.Count} варіантів…";
-            var kept = LoadHistory(c.Path);
-            // Нові — зверху, попередні лишаються нижче.
-            for (int i = 0; i < suggestions.Count; i++)
-            {
-                var suggestion = suggestions[i];
-                var (settings, thumb, skipped) = await Task.Run(() => Build(suggestion), cancel);
-                var look = new Look(suggestion.Name, suggestion.Description, suggestion.Critique, settings, skipped);
-                Thumbs[look] = thumb;
-                kept.Insert(i, look);
-                _results.Children.Insert(Math.Min(i, _results.Children.Count), Card(look, thumb));
-            }
-            while (kept.Count > MaxKept)
-            {
-                Thumbs.Remove(kept[^1]);
-                kept.RemoveAt(kept.Count - 1);
-                if (_results.Children.Count > kept.Count) _results.Children.RemoveAt(_results.Children.Count - 1);
-            }
-            SaveHistory(c.Path, kept);
-            _status.Text = $"✨ Варіантів: {suggestions.Count} (від {model}). «Застосувати» — і стиль на фото.";
+            await ShowAsync(suggestions, model, l => l, cancel);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or System.Text.Json.JsonException or IOException)
@@ -313,6 +316,33 @@ public sealed class AiStyleDialog : Window
             _waiting.Stop();
             _suggest.IsEnabled = true;
         }
+    }
+
+    /// <summary>Нові варіанти — прев'ю й картки зверху (попередні лишаються нижче), і в історію фото.</summary>
+    /// <param name="extra">Що додати до картки (для Pro — план і прибране).</param>
+    private async Task ShowAsync(List<AiSuggestion> suggestions, string model, Func<Look, Look> extra, CancellationToken cancel)
+    {
+        var c = _context;
+        _waiting.Stop();
+        _status.Text = $"Готую прев'ю {suggestions.Count} варіантів…";
+        var kept = LoadHistory(c.Path);
+        for (int i = 0; i < suggestions.Count; i++)
+        {
+            var suggestion = suggestions[i];
+            var (settings, thumb, skipped) = await Task.Run(() => Build(suggestion), cancel);
+            var look = extra(new Look(suggestion.Name, suggestion.Description, suggestion.Critique, settings, skipped));
+            Thumbs[look] = thumb;
+            kept.Insert(i, look);
+            _results.Children.Insert(Math.Min(i, _results.Children.Count), Card(look, thumb));
+        }
+        while (kept.Count > MaxKept)
+        {
+            Thumbs.Remove(kept[^1]);
+            kept.RemoveAt(kept.Count - 1);
+            if (_results.Children.Count > kept.Count) _results.Children.RemoveAt(_results.Children.Count - 1);
+        }
+        SaveHistory(c.Path, kept);
+        _status.Text = $"✨ Варіантів: {suggestions.Count} (від {model}). «Застосувати» — і стиль на фото.";
     }
 
     /// <summary>Готові правки варіанта (ШІ-маски рахуються тут же, на цьому комп'ютері) і його мініатюра.</summary>
@@ -327,7 +357,7 @@ public sealed class AiStyleDialog : Window
 
     private Control Card(Look look, Thumb thumb)
     {
-        var (name, description, critique, settings, skipped) = look;
+        var (name, description, critique, settings, skipped, steps, removed, removals) = look;
         var apply = new Button { Content = "Застосувати", Classes = { "accent" }, FontSize = 12 };
         apply.Click += (_, _) =>
         {
@@ -337,6 +367,9 @@ public sealed class AiStyleDialog : Window
             applied.CopyGeometryFrom(current);
             (applied.CropX, applied.CropY, applied.CropW, applied.CropH) = (current.CropX, current.CropY, current.CropW, current.CropH);
             applied.Heals = current.Heals;
+            // Pro: прибране ШІ — до латок фото (якщо цей варіант уже застосовували, вдруге не додаються).
+            foreach (var spot in removals ?? EquatableList<HealSpot>.Empty)
+                if (!applied.Heals.Contains(spot)) applied.Heals = applied.Heals.Add(spot);
             (applied.BlurAmount, applied.BlurRange, applied.BlurBokeh) = (current.BlurAmount, current.BlurRange, current.BlurBokeh);
             (applied.BlurFocusX, applied.BlurFocusY, applied.DepthMap) = (current.BlurFocusX, current.BlurFocusY, current.DepthMap);
             _context.Apply(applied, name);
@@ -347,6 +380,10 @@ public sealed class AiStyleDialog : Window
         info.Children.Add(new TextBlock { Text = description, FontSize = 12, Foreground = Text, TextWrapping = TextWrapping.Wrap });
         if (critique is not null)
             info.Children.Add(new TextBlock { Text = "🧐 Після перевірки: " + critique, FontSize = 11, Foreground = Dim, TextWrapping = TextWrapping.Wrap });
+        if (steps is { Count: > 0 })
+            info.Children.Add(new TextBlock { Text = "📋 План: " + string.Join(" · ", steps), FontSize = 11, Foreground = Dim, TextWrapping = TextWrapping.Wrap });
+        if (removed is { Count: > 0 })
+            info.Children.Add(new TextBlock { Text = "🪄 Прибрано: " + string.Join(", ", removed), FontSize = 11, Foreground = Dim, TextWrapping = TextWrapping.Wrap });
         if (settings.Masks.Count > 0)
             info.Children.Add(new TextBlock
             {

@@ -66,6 +66,45 @@ public static class AiLooks
         return settings;
     }
 
+    /// <summary>
+    /// «✨ AI Pro»: ШІ-видалення відволікань із плану — як «🪄» вручну, мазок уздовж рамки предмета. Латки рахуються один раз
+    /// і йдуть у всі варіанти. Без моделі LaMa — нічого (завантаження посеред запиту не пропонуємо).
+    /// </summary>
+    public static List<(string Name, HealSpot Spot)> Remove(IReadOnlyList<AiStylist.AiRemoval> removals, LinearImage preview,
+        DevelopSettings settings, CancellationToken cancel = default)
+    {
+        var spots = new List<(string, HealSpot)>();
+        if (removals.Count == 0 || !AiModels.IsInstalled(AiModels.Inpaint)) return spots;
+        var s = settings.Copy();
+        foreach (var r in removals)
+        {
+            cancel.ThrowIfCancellationRequested();
+            var canvas = ImageGeometry.Apply(preview, s, crop: false); // з уже прибраним — наступна латка бачить чистий кадр
+            int w = canvas.Width, h = canvas.Height;
+            double bw = 2 * r.HalfW * w, bh = 2 * r.HalfH * h;
+            double diameter = Math.Max(6, Math.Min(bw, bh) * 1.15);
+            bool horizontal = bw >= bh;
+            double length = Math.Max(0, Math.Max(bw, bh) - diameter);
+            int n = length < 1 ? 1 : (int)Math.Ceiling(length / (diameter / 3)) + 1;
+            var points = new List<MaskPoint>();
+            for (int i = 0; i < n; i++)
+            {
+                double t = n == 1 ? 0.5 : i / (double)(n - 1);
+                double px = r.X * w + (horizontal ? (t - 0.5) * length : 0), py = r.Y * h + (horizontal ? 0 : (t - 0.5) * length);
+                points.Add(new MaskPoint(Math.Clamp(px / w, 0, 1), Math.Clamp(py / h, 0, 1)));
+            }
+            var spot = new HealSpot(HealMode.Remove, diameter / Math.Max(w, h), 0.4, 1, new(points), 0, 0);
+            try
+            {
+                var done = Inpainter.Generate(canvas, spot).Spot;
+                spots.Add((r.Name, done));
+                s.Heals = s.Heals.Add(done);
+            }
+            catch (Microsoft.ML.OnnxRuntime.OnnxRuntimeException) { }
+        }
+        return spots;
+    }
+
     /// <param name="crop">false — усе полотно (для Gemini: координати масок — у частках повного кадру).</param>
     public static Thumb Render(Photo photo, DevelopSettings settings, int size, bool crop)
     {

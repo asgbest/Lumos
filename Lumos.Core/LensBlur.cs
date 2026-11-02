@@ -154,13 +154,15 @@ public static class LensBlur
         if (subject.Mask[cy * width + cx] < 0.5f)
         {
             double best = double.MaxValue;
+            int bx = cx, by = cy; // найближча точка — до центру мас, а не до попередньої знайденої
             for (int y = 0; y < height; y += 2)
                 for (int x = 0; x < width; x += 2)
                 {
                     if (subject.Mask[y * width + x] < 0.5f) continue;
-                    double d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
-                    if (d < best) (best, cx, cy) = (d, x, y);
+                    double d = (x - cx) * (double)(x - cx) + (y - cy) * (double)(y - cy);
+                    if (d < best) (best, bx, by) = (d, x, y);
                 }
+            (cx, cy) = (bx, by);
         }
         return ((cx + 0.5) / width, (cy + 0.5) / height);
     }

@@ -84,8 +84,12 @@ public static class AiStylist
         ["natural_ground"] = MaskKind.NaturalGround, ["artificial_ground"] = MaskKind.ArtificialGround,
     };
 
+    /// <summary>Скільки масок на варіант: звичайний режим — кілька, Pro — повна обробка за планом.</summary>
+    public const int MaxMasks = 4, MaxMasksPro = 9;
+
     /// <summary>Інструкція для моделі: що вміє програма, які параметри й у якому форматі відповідати.</summary>
-    public static string SystemInstruction(IEnumerable<MaskKind> aiMaskKinds, int count)
+    /// <param name="pro">«✨ AI Pro»: варіанти втілюють план обробки (усі його локальні кроки — маски), а не 1–3 маски.</param>
+    public static string SystemInstruction(IEnumerable<MaskKind> aiMaskKinds, int count, bool pro = false)
     {
         var sb = new StringBuilder();
         sb.AppendLine($$"""
@@ -116,11 +120,30 @@ public static class AiStylist
               goes on a "subject" mask with that object's box — it follows the exact outline, so the object itself gets brighter,
               warmer or crisper without a halo on the road or the sky around it. Radial masks are for light and air, not objects:
               a glow where light falls, a pool of light around the subject, gently darker or calmer edges; linear and sky masks
-              for the sky and the ground. 1–3 per look, believable; radial and linear masks soft (feather 60+).
+              for the sky and the ground. {{(pro ? "As many as the edit plan needs" : "1–3 per look")}}, believable; radial and linear masks soft (feather 60+).
             Respect the user's wishes if given — they override these defaults (including style, strength and black-and-white).
 
             """);
-        AppendParameters(sb, aiMaskKinds);
+        if (pro)
+            sb.AppendLine("""
+                PRO MODE. With the photo you also get: a REGION MAP made by Lumos's own segmentation networks (labeled overlay + exact
+                measurements of every region), a −1.5 EV preview showing what the RAW holds in the highlights, and an EDIT PLAN written
+                by a senior editor for this photo. Every look must implement the WHOLE plan, like a professional's layered edit:
+                - every LOCAL step of the plan becomes its own mask (typically 4–8 masks per look): region steps use that region's key
+                  as the mask kind (sky, mountains, water, vegetation, subject with its box…), light steps use radial masks,
+                  foreground/top steps use linear masks; give each mask the Ukrainian name of its step;
+                - the GLOBAL steps go into "settings" (white balance, tone, HSL palette, curve, grading);
+                - the looks differ in MOOD and color (take the plan's moods, one per look), not in which steps they do — the strength
+                  of each step follows the look's mood;
+                - distractions from the plan are already removed by Lumos — do not try to hide them with masks.
+                Use the region measurements: a blown sky that the RAW can recover needs strong sky Exposure/Highlights/Whites minus;
+                a subject that should draw the eye must end up clearly brighter or richer than its surroundings.
+                An underexposed or backlit RAW (dark land under a bright sky): open the land with Shadows and its own region masks
+                (vegetation, mountains, ground, subject) rather than a huge global Exposure, keep true blacks (the darkest tones near
+                L* 5–10, no milky fog unless it is the intent) and keep the sky's tone and clouds.
+
+                """);
+        AppendParameters(sb, aiMaskKinds, pro ? MaxMasksPro : MaxMasks - 1);
         sb.AppendLine("""
             Answer with JSON only, no markdown:
             {"looks": [{"name": "...", "intent": "...", "description": "...", "settings": {...}, "masks": [{"name": "...", "kind": "...", "invert": false,
@@ -132,7 +155,7 @@ public static class AiStylist
     }
 
     /// <summary>Опис параметрів Lumos для моделі: порядок обробки, повзунки, криві, колеса, маски (спільне для фото й серії).</summary>
-    internal static void AppendParameters(StringBuilder sb, IEnumerable<MaskKind> aiMaskKinds)
+    internal static void AppendParameters(StringBuilder sb, IEnumerable<MaskKind> aiMaskKinds, int maxMasks = MaxMasks - 1)
     {
         sb.AppendLine($$"""
             Every look is expressed ONLY with Lumos parameters below; Lumos applies them automatically.
@@ -155,7 +178,7 @@ public static class AiStylist
             - Curve<Channel> for Channel in {{string.Join(", ", Curves)}}: array of 2…8 points [[x, y], …] with x, y in 0…1, x increasing,
               including endpoints (identity is [[0,0],[1,1]]). E.g. faded blacks: CurveMaster [[0,0.06],[0.25,0.24],[0.75,0.78],[1,1]].
 
-            LOCAL MASKS ("masks" array, 0…3 per look, only when they clearly help):
+            LOCAL MASKS ("masks" array, 0…{{maxMasks}} per look, only when they clearly help):
             - "kind": one of "linear", "radial"{{string.Concat(aiMaskKinds.Select(k => $", \"{KindName(k)}\""))}}.
               AI kinds are segmented automatically by Lumos (sky, subject = one object you point at, water, vegetation, mountains, architecture = buildings,
               natural_ground = earth/sand/field, artificial_ground = roads/floors). Only use AI kinds that are actually present in the photo.
@@ -174,6 +197,78 @@ public static class AiStylist
             """);
     }
 
+    // ── «✨ AI Pro»: спершу план, як у розборі професіонала, потім варіанти за ним ──────────────────
+
+    /// <summary>Інструкція для першого кроку Pro: розібрати кадр і скласти план обробки.</summary>
+    public static string PlanInstruction(int count) => $$"""
+        You are a senior landscape, travel and portrait photo editor — the kind who posts annotated before/after breakdowns
+        ("mask the sky and bring it back", "slight dehaze on the mountains", "brush the boat to draw attention", "radial filter
+        in the middle, brighten a little", "darken the foreground a little", "push cool tones into the whole photo", "remove").
+        You get the as-shot photo, a REGION MAP from Lumos's segmentation networks (colored, labeled overlay + exact
+        measurements), and a −1.5 EV preview showing what the RAW holds in the highlights.
+        Write the EDIT PLAN for this photo, the way you would annotate it:
+        - "story": what the photo is about and the mood it can have; "eye": where the eye must go and what pulls it away now.
+        - "global": 3–6 global steps (white balance and color temperature, overall exposure/tone, the color palette with HSL —
+          which colors to shift, calm or enrich — contrast/curve, grading). Concrete, for THIS photo.
+        - "local": 4–8 local steps, each on ONE target: a region key from the map (sky, mountains, water, vegetation, subject, …)
+          or "radial" (a pool of light, brightening the center/subject area, calmer edges) or "linear" (darken the foreground,
+          the top or a side). Typical pro moves: bring back a blown sky that the RAW still holds; dehaze distant mountains a
+          little; make the subject pop (brighter, a bit more color and clarity); a soft radial lift where light falls; darken the
+          foreground a little so the eye travels in; calm a bright distracting area. Every step has a short Ukrainian "name",
+          a precise English "goal" and "strength" (subtle | medium | strong). Only steps that really help this photo.
+        - "remove": distractions to erase with AI removal — small things that pull the eye (a rock or branch poking in at an
+          edge, litter, a sign, a stray tiny person, a sensor spot). Each smaller than ~5% of the frame, never part of the subject
+          or of the main scenery; at most 3; empty if none. Give the Ukrainian "name" and the box: center x1, y1 and half sizes
+          radius_x, radius_y (fractions of the image), slightly larger than the object.
+        - "moods": {{count}} clearly different moods this plan can be finished in (e.g. cool moody Nordic, warm late light, soft film).
+        Respect the user's wishes if given. Answer with JSON only:
+        {"story": "...", "eye": "...", "global": ["..."], "local": [{"name": "...", "target": "sky", "goal": "...", "strength": "medium"}],
+         "remove": [{"name": "...", "x1": 0.04, "y1": 0.72, "radius_x": 0.04, "radius_y": 0.05}], "moods": ["..."]}
+        """;
+
+    /// <summary>Запит для плану (і для варіантів — разом із самим планом): дані фото, ділянки, фото, карта, «−1,5 EV».</summary>
+    public static List<GeminiPart> ProParts(Photo photo, DevelopSettings current, string? wish, byte[] original, RegionMap map, string? plan)
+    {
+        var parts = new List<GeminiPart>
+        {
+            new(UserPrompt(photo, current, wish) + map.Describe() +
+                (plan is null ? "" : "\nEDIT PLAN for this photo (implement all of it in every look): " + plan) + "\nThe photo as shot:"),
+            new(null, original),
+            new("REGION MAP (Lumos's segmentation; colored and labeled with the region keys):"),
+            new(null, map.Overlay),
+            new(Inv($"The same frame at {RegionMap.RecoveryEv:0.0} EV — what the file holds in the highlights:")),
+            new(null, map.Recovery),
+        };
+        return parts;
+    }
+
+    /// <summary>План обробки: сам JSON (для другого кроку й перевірки), кроки українською для показу і що прибрати.</summary>
+    public sealed record AiPlan(string Json, string Story, IReadOnlyList<string> Steps, IReadOnlyList<AiRemoval> Removals);
+
+    /// <summary>Що прибрати ШІ-видаленням: назва й рамка (центр і піврозміри, частки кадру).</summary>
+    public sealed record AiRemoval(string Name, double X, double Y, double HalfW, double HalfH);
+
+    public static AiPlan ParsePlan(string answer)
+    {
+        var root = ParseRoot(answer);
+        var steps = new List<string>();
+        if (root["local"] is JsonArray local)
+            foreach (var step in local.OfType<JsonObject>())
+                steps.Add(Text(step["name"], Text(step["goal"], "")));
+        var removals = new List<AiRemoval>();
+        if (root["remove"] is JsonArray remove)
+            foreach (var r in remove.OfType<JsonObject>().Take(3))
+            {
+                double hw = Num(r["radius_x"], 0, 0, 0.5), hh = Num(r["radius_y"], 0, 0, 0.5);
+                // Великі «відволікання» — радше помилка моделі: ШІ-видалення розмаже пів кадру.
+                if (hw <= 0.003 || hh <= 0.003 || hw * hh * 4 > 0.06) continue;
+                removals.Add(new AiRemoval(Text(r["name"], "предмет"), Num(r["x1"], 0.5, 0, 1), Num(r["y1"], 0.5, 0, 1), hw, hh));
+            }
+        return new AiPlan(root.ToJsonString(), Text(root["story"], ""), steps.Where(s => s.Length > 0).ToList(), removals);
+    }
+
+    private static string Inv(FormattableString s) => s.ToString(CultureInfo.InvariantCulture);
+
     /// <summary>Текст запиту: дані про фото, поточна обрізка і побажання людини.</summary>
     public static string UserPrompt(Photo photo, DevelopSettings current, string? wish)
     {
@@ -187,7 +282,7 @@ public static class AiStylist
         return sb.ToString();
     }
 
-    private static string KindName(MaskKind kind) => MaskKinds.First(p => p.Value == kind).Key;
+    internal static string KindName(MaskKind kind) => MaskKinds.First(p => p.Value == kind).Key;
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(3) };
 
@@ -196,8 +291,10 @@ public static class AiStylist
     /// (сильніше, де ефект не читається; м'якше, де перебір; маски — туди, куди треба). Без цього вона вгадує наосліп.
     /// </summary>
     /// <param name="originalMetrics">Вимірювання оригіналу — від них рахуються огріхи варіантів (<see cref="LookMetrics.Problems"/>).</param>
+    /// <param name="pro">«✨ AI Pro»: карта ділянок, вимірювання кожного варіанта по ділянках (у тому ж порядку) і план обробки.</param>
     public static List<GeminiPart> RefineParts(byte[] original, LookMetrics originalMetrics,
-        IReadOnlyList<(AiSuggestion Look, byte[] Render, LookMetrics Metrics)> looks, string? wish)
+        IReadOnlyList<(AiSuggestion Look, byte[] Render, LookMetrics Metrics)> looks, string? wish,
+        (RegionMap Map, IReadOnlyList<RegionReport> Reports, string Plan)? pro = null)
     {
         var parts = new List<GeminiPart>
         {
@@ -207,6 +304,7 @@ public static class AiStylist
                 refer to these full, uncropped images.
                 {(string.IsNullOrWhiteSpace(wish) ? "" : "User's wishes: " + wish.Trim())}
                 Original — measured: {originalMetrics.Describe()}
+                {(pro is { } p ? p.Map.Describe() + "\nEDIT PLAN (every look must still implement all of it): " + p.Plan : "")}
                 """),
             new(null, original),
         };
@@ -214,9 +312,16 @@ public static class AiStylist
         {
             var (look, render, metrics) = looks[i];
             var problems = metrics.Problems(originalMetrics);
+            string regions = "";
+            if (pro is { } r && i < r.Reports.Count)
+            {
+                problems.AddRange(r.Map.Problems(r.Reports[i]));
+                regions = r.Map.Describe(r.Reports[i]);
+            }
             parts.Add(new($"""
                 Look {i + 1}: «{look.Name}». JSON: {look.Raw.ToJsonString()}
                 Measured: {metrics.Describe()}
+                {regions}
                 {(problems.Count == 0 ? "Measured problems: none." : "MEASURED PROBLEMS (must fix):\n- " + string.Join("\n- ", problems))}
                 Render of look {i + 1}:
                 """));
@@ -292,13 +397,13 @@ public static class AiStylist
     /// Розбір відповіді в правки. Базою є стартові правки фото (для RAW — різкість і шумозаглушення) з поточною геометрією й латками:
     /// стиль замінює лише вигляд, а не обрізку чи прибрані плями.
     /// </summary>
-    public static List<AiSuggestion> Parse(string answer, DevelopSettings current, string photoPath)
+    public static List<AiSuggestion> Parse(string answer, DevelopSettings current, string photoPath, int maxMasks = MaxMasks)
     {
         // Модель інколи загортає JSON у ```json … ``` попри інструкцію.
         var root = ParseRoot(answer);
         var looks = (root["looks"] ?? root["styles"]) as JsonArray ?? throw new InvalidOperationException("У відповіді Gemini немає варіантів.");
 
-        var result = looks.OfType<JsonObject>().Select(look => ParseLook(look, current, photoPath)).ToList();
+        var result = looks.OfType<JsonObject>().Select(look => ParseLook(look, current, photoPath, maxMasks)).ToList();
         if (result.Count == 0) throw new InvalidOperationException("Gemini не запропонував жодного варіанта.");
         return result;
     }
@@ -313,7 +418,7 @@ public static class AiStylist
     }
 
     /// <summary>Один варіант для конкретного фото: його стартові правки, геометрія й латки + числа моделі.</summary>
-    internal static AiSuggestion ParseLook(JsonObject look, DevelopSettings current, string photoPath)
+    internal static AiSuggestion ParseLook(JsonObject look, DevelopSettings current, string photoPath, int maxMasks = MaxMasks)
     {
         var settings = DevelopSettings.DefaultFor(photoPath);
         settings.CopyGeometryFrom(current);
@@ -326,7 +431,7 @@ public static class AiStylist
 
         var masks = new List<AiMaskSuggestion>();
         if (look["masks"] is JsonArray maskArray)
-            foreach (var m in maskArray.OfType<JsonObject>().Take(4))
+            foreach (var m in maskArray.OfType<JsonObject>().Take(maxMasks))
                 if (ParseMask(m) is { } mask) masks.Add(mask);
 
         return new AiSuggestion(Text(look["name"], "Варіант"), Text(look["description"], ""), settings, masks)

@@ -7,10 +7,12 @@ namespace Lumos.Core;
 /// відтінок нейтральних (сірих) ділянок і середня насиченість. На око модель часто не помічає брудних тіней
 /// чи пурпурного відтінку асфальту й гір — числа помічають, а <see cref="Problems"/> називає це прямо.
 /// </summary>
+/// <param name="Deep">L* найтемніших 2 % кадру: вище ~12 — немає справжніх тіней, фото «молочне».</param>
+/// <param name="Light">L* найсвітліших 2 %.</param>
 public sealed record LookMetrics(double Top, double Middle, double Bottom, double Mean, double ShadowClip, double HighlightClip,
-    double CastA, double CastB, double Chroma)
+    double CastA, double CastB, double Chroma, double Deep = 0, double Light = 100)
 {
-    private static readonly double[] Linear = Enumerable.Range(0, 256).Select(i =>
+    internal static readonly double[] Linear =Enumerable.Range(0, 256).Select(i =>
     {
         double c = i / 255.0;
         return c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
@@ -24,6 +26,7 @@ public sealed record LookMetrics(double Top, double Middle, double Bottom, doubl
         long[] zoneCount = new long[3];
         long count = 0, dark = 0, bright = 0, neutral = 0;
         double sumA = 0, sumB = 0, sumChroma = 0;
+        var histogram = new long[101];
         for (int y = 0; y < height; y += step)
         {
             int zone = Math.Min(2, y * 3 / height);
@@ -34,6 +37,7 @@ public sealed record LookMetrics(double Top, double Middle, double Bottom, doubl
                 zoneSum[zone] += l;
                 zoneCount[zone]++;
                 count++;
+                histogram[Math.Clamp((int)l, 0, 100)]++;
                 if (l < 3) dark++;
                 if (l > 98) bright++;
                 double chroma = Math.Sqrt(a * a + b * b);
@@ -51,12 +55,21 @@ public sealed record LookMetrics(double Top, double Middle, double Bottom, doubl
         double total = Math.Max(1, count);
         return new LookMetrics(Zone(0), Zone(1), Zone(2), (zoneSum[0] + zoneSum[1] + zoneSum[2]) / total,
             100.0 * dark / total, 100.0 * bright / total,
-            neutral > 0 ? sumA / neutral : 0, neutral > 0 ? sumB / neutral : 0, sumChroma / total);
+            neutral > 0 ? sumA / neutral : 0, neutral > 0 ? sumB / neutral : 0, sumChroma / total,
+            Percentile(histogram, count, 0.02), Percentile(histogram, count, 0.98));
+    }
+
+    private static double Percentile(long[] histogram, long count, double q)
+    {
+        long target = (long)(count * q), seen = 0;
+        for (int i = 0; i < histogram.Length; i++)
+            if ((seen += histogram[i]) > target) return i;
+        return 100;
     }
 
     /// <summary>Числа для моделі (англійською, як і весь запит).</summary>
     public string Describe() => string.Create(CultureInfo.InvariantCulture,
-        $"brightness L* top/middle/bottom third {Top:0}/{Middle:0}/{Bottom:0} (mean {Mean:0}); crushed blacks {ShadowClip:0.0}% · blown highlights {HighlightClip:0.0}%; " +
+        $"brightness L* top/middle/bottom third {Top:0}/{Middle:0}/{Bottom:0} (mean {Mean:0}); darkest/brightest 2% at L* {Deep:0}/{Light:0}; crushed blacks {ShadowClip:0.0}% · blown highlights {HighlightClip:0.0}%; " +
         $"neutral-gray cast a* {CastA:+0.0;-0.0;0} (+magenta/−green), b* {CastB:+0.0;-0.0;0} (+yellow/−blue); mean chroma {Chroma:0}");
 
     /// <summary>Явні огріхи рендера відносно оригіналу; порожньо — нічого підозрілого.</summary>
@@ -83,6 +96,10 @@ public sealed record LookMetrics(double Top, double Middle, double Bottom, doubl
         if (HighlightClip > 2 && HighlightClip > original.HighlightClip + 1)
             problems.Add(string.Create(CultureInfo.InvariantCulture, $"blown highlights: {HighlightClip:0.0}% of the image is pure white"));
 
+        // Протилежна біда: усе підняли — і зникли справжні тіні, кадр «молочний», як крізь туман.
+        if (Deep > 14 && Deep > original.Deep + 6)
+            problems.Add(string.Create(CultureInfo.InvariantCulture,
+                $"washed out / milky: even the darkest 2% sit at L* {Deep:0} (no real shadows), contrast range {Deep:0}–{Light:0} — bring Blacks down and add Contrast or an S-curve; open dark areas with Shadows and region masks rather than global Exposure; keep a matte fade only as a small, deliberate touch"));
         double da = CastA - original.CastA, db = CastB - original.CastB;
         if (CastA > 2.5 && da > 1.5 && CastB < 0.5) // пурпур + синява = фіолетовий
             problems.Add(string.Create(CultureInfo.InvariantCulture,
@@ -95,7 +112,7 @@ public sealed record LookMetrics(double Top, double Middle, double Bottom, doubl
         return problems;
     }
 
-    private static (double L, double A, double B) Lab(double r, double g, double b)
+    internal static (double L, double A, double B) Lab(double r, double g, double b)
     {
         // Лінійний sRGB → XYZ (D65) → CIELAB.
         double x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;

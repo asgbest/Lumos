@@ -20,6 +20,9 @@ public sealed class UiState
     /// <summary>Модель Gemini для «✨ AI» (null — типова). Сам ключ — окремо, зашифрований (SecretStore).</summary>
     public string? GeminiModel { get; set; }
 
+    /// <summary>«✨ AI Pro» увімкнено: карта ділянок, план і маски по ділянках (довше, зате обробка складніша).</summary>
+    public bool AiPro { get; set; }
+
     /// <summary>Останнє побажання в «✨ AI».</summary>
     public string? AiWish { get; set; }
 
