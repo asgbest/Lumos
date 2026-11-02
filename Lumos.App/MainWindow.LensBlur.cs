@@ -87,7 +87,7 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is Microsoft.ML.OnnxRuntime.OnnxRuntimeException or IOException or InvalidOperationException)
         {
-            ActionText.Text = $"⚠️ Не вдалося збудувати карту глибини: {ex.Message}";
+            ShowWarning("Не вдалося збудувати карту глибини.", ex);
         }
         finally
         {

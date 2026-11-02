@@ -134,6 +134,19 @@
           </ListBox>
         </DockPanel>
       </Border>
+
+      <!-- Помилки й попередження — помітна плашка над фото (а не дрібний сірий рядок угорі); повний текст — у журналі -->
+      <Border x:Name="WarningBanner" Grid.RowSpan="2" VerticalAlignment="Top" HorizontalAlignment="Center" MaxWidth="760"
+              Margin="20,14" Padding="14,10" CornerRadius="8" Background="#F2402A1C" BorderBrush="#C77B2E" BorderThickness="1"
+              BoxShadow="0 4 16 0 #80000000" IsVisible="False">
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="✕" FontSize="13" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Top"
+                  Click="OnWarningCloseClick" ToolTip.Tip="Закрити" />
+          <Button x:Name="WarningLogButton" DockPanel.Dock="Right" Content="📄 Подробиці" FontSize="12" Padding="10,2" Margin="12,0,0,0"
+                  VerticalAlignment="Top" Click="OnWarningLogClick" ToolTip.Tip="Відкрити журнал помилок з повним текстом" />
+          <TextBlock x:Name="WarningText" TextWrapping="Wrap" FontSize="14" Foreground="#FFE9D6" VerticalAlignment="Center" LineHeight="20" />
+        </DockPanel>
+      </Border>
     </Grid>
 
   </DockPanel>

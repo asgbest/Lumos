@@ -591,7 +591,7 @@ public partial class MainWindow
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                ActionText.Text = $"⚠️ {item.Name}: {ex.Message}";
+                ShowWarning($"Не вдалося зберегти правки для {item.Name}.", ex);
             }
         }
     }

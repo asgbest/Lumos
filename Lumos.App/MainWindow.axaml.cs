@@ -299,7 +299,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            ActionText.Text = $"⚠️ Не вдалося зберегти правки: {ex.Message}";
+            ShowWarning("Не вдалося зберегти правки.", ex);
         }
     }
 
@@ -415,7 +415,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             ExportLog.Write(photoPath, jpegPath, ex);
-            ActionText.Text = $"⚠️ Експорт не вдався: {ex.Message}";
+            ActionText.Text = "⚠️ Експорт не вдався";
             await Notice.ShowAsync(this, $"⚠️ {Path.GetFileName(photoPath)} не експортовано", ex.Message);
             return false;
         }
@@ -461,7 +461,7 @@ public partial class MainWindow : Window
         }
         if (string.Equals(Path.GetFullPath(jpegPath), Path.GetFullPath(photoPath), StringComparison.OrdinalIgnoreCase))
         {
-            ActionText.Text = "⚠️ Не можна записати експорт поверх оригіналу — обери інше ім'я";
+            ShowWarning("Не можна записати експорт поверх оригіналу — обери інше ім'я.");
             return;
         }
 
@@ -498,7 +498,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            ActionText.Text = $"⚠️ Папка експорту недоступна ({ex.Message}) — обери, куди зберегти";
+            ShowWarning($"Папка експорту «{folder}» недоступна — обери, куди зберегти.", ex);
             return null;
         }
     }
@@ -675,7 +675,7 @@ public partial class MainWindow : Window
                 if (!_gpuWarned && OperatingSystem.IsWindowsVersionAtLeast(6, 2) && Core.Gpu.GpuContext.LastError is { } gpuError)
                 {
                     _gpuWarned = true;
-                    ActionText.Text = $"⚠️ Відеокарта відмовила — обробка йде на процесорі ({gpuError})";
+                    ShowWarning($"Відеокарта відмовила — обробка йде на процесорі (повільніше). Причина: {gpuError}");
                 }
                 UpdateMaskOverlay(); // розмір кадру міг змінитись (обрізка) — рамка маски має збігатися з фото
                 if (!zoomed) // гістограма — для всього кадру, а не для видимого шматка

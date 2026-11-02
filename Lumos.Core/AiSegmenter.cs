@@ -16,6 +16,7 @@ public static class AiSegmenter
 
     private static readonly Dictionary<string, (InferenceSession Session, bool Gpu)> Sessions = [];
     private static readonly Lock SessionLock = new();
+    private static readonly Lock GpuLock = new();
 
     /// <summary>Сесія мережі: спершу відеокарта, якщо не вдалося — процесор. Створюється один раз.</summary>
     internal static (InferenceSession Session, bool Gpu) SessionFor(AiModel model)
@@ -50,17 +51,28 @@ public static class AiSegmenter
         var (session, onGpu) = SessionFor(model);
         try
         {
-            using var results = session.Run(inputs);
-            gpu = onGpu;
-            return results.First().AsTensor<float>().ToArray();
+            // На відеокарті — по одній мережі за раз: два одночасні запуски DirectML (навіть різних мереж — «✨ AI Pro» рахує
+            // маски у фоні, а людина тим часом додає «Покриття») падають з «[ErrorCode:Fail] … Unspecified error».
+            // На процесорі сесії потокобезпечні — там без черги.
+            if (onGpu) GpuLock.Enter();
+            try
+            {
+                using var results = session.Run(inputs);
+                gpu = onGpu;
+                return results.First().AsTensor<float>().ToArray();
+            }
+            finally
+            {
+                if (onGpu) GpuLock.Exit();
+            }
         }
         catch (OnnxRuntimeException) when (onGpu)
         {
             lock (SessionLock)
             {
                 CpuOnly.Add(model.FileName);
-                Sessions.Remove(model.FileName);
-                session.Dispose();
+                // Сесію не звільняємо: нею ще може чекати черги інший потік — хай доробить, решту прибере збирач сміття.
+                if (Sessions.TryGetValue(model.FileName, out var current) && current.Session == session) Sessions.Remove(model.FileName);
             }
             return Run(model, inputs, out gpu);
         }
@@ -147,6 +159,7 @@ public static class AiSegmenter
     private static (float[] Mask, bool Gpu) SegmentOnce(AiModel model, byte[] bgra, int width, int height, int channel, string? cacheKey)
     {
         var (session, gpu) = SessionFor(model);
+        string inputName = session.InputMetadata.Keys.First();
         int size = model.InputSize;
         string? key = cacheKey is null ? null : model.FileName + "|" + cacheKey;
 
@@ -171,9 +184,7 @@ public static class AiSegmenter
                 }
             });
 
-            string inputName = session.InputMetadata.Keys.First();
-            using (var outputs = session.Run([NamedOnnxValue.CreateFromTensor(inputName, input)]))
-                output = outputs.First().AsTensor<float>().ToArray();
+            output = Run(model, [NamedOnnxValue.CreateFromTensor(inputName, input)], out gpu);
             if (key is not null && model.Channels > 1) _lastOutput = new CachedOutput(key, output);
         }
         // Вихід — квадрат, не обов'язково розміром із вхід («Ландшафт» видає 1/4: 192×192).
