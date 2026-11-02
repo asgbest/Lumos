@@ -25,6 +25,8 @@
           <Button x:Name="ResetButton" Content="↺ Скинути все" Click="OnResetClick" IsEnabled="False" />
           <Button x:Name="ExportButton" Content="📤 Експорт JPEG" Click="OnExportClick" IsEnabled="False" Classes="accent"
                   ToolTip.Tip="Повна роздільність, найвища якість (Ctrl+E)" />
+          <Button x:Name="ExportFolderButton" Content="📁▾" Padding="8,2" Margin="-6,0,0,0" Click="OnExportFolderClick"
+                  ToolTip.Tip="Папка для експорту" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="12">
           <TextBlock Text="Lumos" FontSize="19" FontWeight="Bold" LetterSpacing="-0.5" VerticalAlignment="Center" Margin="2,0,4,1"
@@ -95,6 +97,8 @@
               <Button Content="📋 Копіювати правки" Classes="libraryButton" Click="OnCopySettingsClick" ToolTip.Tip="Запам'ятати правки поточного фото, крім обрізки (Ctrl+Shift+C)" />
               <Button x:Name="PasteButton" Content="📌 Вставити" Classes="libraryButton" Click="OnPasteSettingsClick" IsEnabled="False"
                       ToolTip.Tip="Накласти скопійовані правки на вибрані фото (Ctrl+Shift+V)" />
+              <Button Content="📂 У «Відібрані»" Classes="libraryButton" Click="OnMovePicksClick"
+                      ToolTip.Tip="Перемістити фото з позначкою ⚑ (клавіша P) у підпапку «Відібрані» — разом із правками, рейтингом і варіантами AI" />
               <ComboBox x:Name="FilterBox" MinWidth="150" FontSize="12" ToolTip.Tip="Показувати лише фото з позначкою чи рейтингом" />
             </StackPanel>
             <TextBlock x:Name="LibraryText" VerticalAlignment="Center" FontSize="12" Foreground="#A0A0A0" TextTrimming="CharacterEllipsis" />

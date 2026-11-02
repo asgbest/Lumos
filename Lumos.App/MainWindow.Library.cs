@@ -364,6 +364,87 @@ public partial class MainWindow
         if (FilterBox.SelectedIndex > 0) ApplyFilter();
     }
 
+    // ── Відібрані ──────────────────────────────────────────────────────────────
+
+    private async void OnMovePicksClick(object? sender, RoutedEventArgs e) => await MovePicksAsync();
+
+    /// <summary>
+    /// «📂 У «Відібрані»»: фото з позначкою ⚑ фізично переїжджають у підпапку «Відібрані» — разом із правками,
+    /// рейтингом і варіантами AI. Зі стрічки вони зникають; якщо в папці нічого не лишилось — відкривається «Відібрані».
+    /// </summary>
+    private async Task MovePicksAsync()
+    {
+        if (_folder is not { } folder) return;
+        if (string.Equals(Path.GetFileName(folder), PhotoMover.PicksFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            ActionText.Text = $"📂 Це вже папка «{PhotoMover.PicksFolder}»";
+            return;
+        }
+        var picks = _allItems.Where(i => i.Flag == PhotoFlag.Pick).ToList();
+        if (picks.Count == 0)
+        {
+            ActionText.Text = "⚑ Спершу познач фото клавішею P — тоді їх можна перемістити в «Відібрані»";
+            return;
+        }
+        string target = Path.Combine(folder, PhotoMover.PicksFolder);
+        if (!await Notice.ConfirmAsync(this, $"Перемістити {picks.Count} фото в «{PhotoMover.PicksFolder}»?",
+                $"Файли переїдуть у {target} разом із правками, рейтингом і варіантами AI. Зі стрічки цієї папки вони зникнуть.",
+                "📂 Перемістити"))
+            return;
+
+        CommitEdits();
+        int currentIndex = _currentItem is null ? -1 : _items.IndexOf(_currentItem);
+        bool currentMoves = _currentItem is not null && picks.Contains(_currentItem);
+        if (currentMoves)
+        {
+            // Відпускаємо поточне фото: правки вже записані, а фонове розкодування не повинно тримати файл.
+            _openGeneration++;
+            _photoPath = null;
+            if (_fullTask is { } full) try { await full; } catch { }
+        }
+        foreach (var item in picks)
+            if (_prefetch.Remove(item.Path, out var ready)) try { await ready; } catch { }
+
+        var moved = new List<PhotoItem>();
+        var failed = new List<string>();
+        foreach (var item in picks)
+        {
+            ActionText.Text = $"📂 Переміщую {moved.Count + 1} з {picks.Count}: {item.Name}…";
+            try
+            {
+                string newPath = await Task.Run(() => PhotoMover.Move(item.Path, target));
+                _catalog.Rename(item.Path, newPath);
+                AiStyleDialog.MoveHistory(item.Path, newPath);
+                moved.Add(item);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                failed.Add($"{item.Name}: {ex.Message}");
+            }
+        }
+
+        _allItems = _allItems.Except(moved).ToList();
+        bool currentGone = _currentItem is not null && moved.Contains(_currentItem);
+        if (currentGone) _currentItem = null;
+        ApplyFilter();
+
+        if (_allItems.Count == 0)
+        {
+            await OpenFolderAsync(target, null);
+        }
+        else if (currentMoves)
+        {
+            // Поточне не вдалось перемістити — відкриваємо його знову; інакше — сусіднє (або будь-яке, якщо фільтр тепер порожній).
+            var next = !currentGone ? _currentItem!
+                : _items.Count > 0 ? _items[Math.Clamp(currentIndex, 0, _items.Count - 1)] : _allItems[0];
+            await OpenAsync(next.Path);
+        }
+
+        ActionText.Text = $"📂 У «{PhotoMover.PicksFolder}» переміщено {moved.Count}" + (failed.Count > 0 ? $" з {picks.Count}" : "") + " фото";
+        if (failed.Count > 0)
+            await Notice.ShowAsync(this, $"⚠️ Не переміщено {failed.Count} фото", string.Join("\n", failed));
+    }
+
     // ── Пакетні дії ────────────────────────────────────────────────────────────
 
     private void OnCopySettingsClick(object? sender, RoutedEventArgs e) => CopySettings();
@@ -459,12 +540,17 @@ public partial class MainWindow
     /// <summary>Експорт кількох фото в одну папку — по черзі, кожне в повній роздільності й найвищій якості.</summary>
     private async Task ExportManyAsync(IReadOnlyList<PhotoItem> items)
     {
-        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        string? target = ExportFolder();
+        if (target is null)
         {
-            Title = $"Куди експортувати {items.Count} фото",
-            SuggestedStartLocation = _folder is null ? null : await StorageProvider.TryGetFolderFromPathAsync(_folder),
-        });
-        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } target) return;
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = $"Куди експортувати {items.Count} фото",
+                SuggestedStartLocation = _folder is null ? null : await StorageProvider.TryGetFolderFromPathAsync(_folder),
+            });
+            if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } picked) return;
+            target = picked;
+        }
 
         CommitEdits();
         ExportButton.IsEnabled = false;
@@ -475,9 +561,7 @@ public partial class MainWindow
             foreach (var item in items)
             {
                 var settings = string.Equals(item.Path, _photoPath, StringComparison.OrdinalIgnoreCase) ? _settings.Copy() : EditSidecar.Load(item.Path);
-                string baseName = Path.GetFileNameWithoutExtension(item.Path);
-                bool jpeg = Path.GetExtension(item.Path).ToLowerInvariant() is ".jpg" or ".jpeg";
-                string path = UniquePath(Path.Combine(target, baseName + (jpeg ? "-Lumos" : "") + ".jpg"));
+                string path = ResultPath(target, item.Path);
                 ActionText.Text = $"Експорт {done + 1} з {items.Count}: {Path.GetFileName(path)}…";
                 if (await ExportOneAsync(item.Path, settings, path)) done++;
             }
@@ -487,18 +571,6 @@ public partial class MainWindow
         {
             _exportsRunning--;
             ExportButton.IsEnabled = _photoPath is not null;
-        }
-    }
-
-    /// <summary>Ім'я, якого ще немає в папці: «назва.jpg», «назва (2).jpg»… — пакетний експорт нічого не перезаписує.</summary>
-    private static string UniquePath(string path)
-    {
-        if (!File.Exists(path)) return path;
-        string dir = Path.GetDirectoryName(path)!, name = Path.GetFileNameWithoutExtension(path), ext = Path.GetExtension(path);
-        for (int i = 2; ; i++)
-        {
-            string candidate = Path.Combine(dir, $"{name} ({i}){ext}");
-            if (!File.Exists(candidate)) return candidate;
         }
     }
 }

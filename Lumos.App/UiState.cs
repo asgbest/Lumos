@@ -23,6 +23,9 @@ public sealed class UiState
     /// <summary>Останнє побажання в «✨ AI».</summary>
     public string? AiWish { get; set; }
 
+    /// <summary>Куди експортувати (null — щоразу питати). Задана — експорт іде туди одразу, без вікна вибору.</summary>
+    public string? ExportFolder { get; set; }
+
     /// <summary>Чи вже питали про ярлик на робочому столі (питаємо раз — під час першого запуску зібраного exe).</summary>
     public bool ShortcutOffered { get; set; }
 

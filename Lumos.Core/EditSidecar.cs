@@ -31,6 +31,9 @@ public static class EditSidecar
         return DevelopSettings.DefaultFor(photoPath);
     }
 
+    /// <summary>Усі можливі файли правок фото (новий і з часів Lumen) — щоб перемістити їх разом із ним.</summary>
+    public static string[] Files(string photoPath) => [PathFor(photoPath), LegacyPathFor(photoPath)];
+
     public static bool Exists(string photoPath) => File.Exists(PathFor(photoPath)) || File.Exists(LegacyPathFor(photoPath));
 
     /// <summary>Коли файл правок востаннє змінювався (для кешу мініатюр); null — правок немає.</summary>

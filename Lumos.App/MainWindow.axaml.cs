@@ -84,6 +84,7 @@ public partial class MainWindow : Window
         CropView.CropChanged += OnCropDragged;
         InitZoom();
         InitLibrary();
+        UpdateExportFolderTip();
         AddHandler(DragDrop.DropEvent, OnDrop);
         // Без фокусу ніде Avalonia не передає натискання клавіш, тож вікно саме тримає фокус, коли поля не активні.
         Focusable = true;
@@ -396,19 +397,25 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Якщо оригінал сам JPEG, пропонуємо інше ім'я, щоб випадково не записати поверх нього.
-        string baseName = Path.GetFileNameWithoutExtension(photoPath);
-        bool sourceIsJpeg = Path.GetExtension(photoPath).ToLowerInvariant() is ".jpg" or ".jpeg";
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        string jpegPath;
+        if (ExportFolder() is { } folder)
         {
-            Title = "Експорт у JPEG",
-            SuggestedFileName = baseName + (sourceIsJpeg ? "-Lumos.jpg" : ".jpg"),
-            SuggestedStartLocation = await StorageProvider.TryGetFolderFromPathAsync(Path.GetDirectoryName(photoPath)!),
-            DefaultExtension = "jpg",
-            FileTypeChoices = [FilePickerFileTypes.ImageJpg],
-            ShowOverwritePrompt = true,
-        });
-        if (file?.TryGetLocalPath() is not { } jpegPath) return;
+            jpegPath = ResultPath(folder, photoPath);
+        }
+        else
+        {
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Експорт у JPEG",
+                SuggestedFileName = Path.GetFileName(ResultPath(Path.GetDirectoryName(photoPath)!, photoPath)),
+                SuggestedStartLocation = await StorageProvider.TryGetFolderFromPathAsync(Path.GetDirectoryName(photoPath)!),
+                DefaultExtension = "jpg",
+                FileTypeChoices = [FilePickerFileTypes.ImageJpg],
+                ShowOverwritePrompt = true,
+            });
+            if (file?.TryGetLocalPath() is not { } picked) return;
+            jpegPath = picked;
+        }
         if (string.Equals(Path.GetFullPath(jpegPath), Path.GetFullPath(photoPath), StringComparison.OrdinalIgnoreCase))
         {
             ActionText.Text = "⚠️ Не можна записати експорт поверх оригіналу — обери інше ім'я";
@@ -427,6 +434,78 @@ public partial class MainWindow : Window
             ExportButton.IsEnabled = _photoPath is not null;
         }
     }
+
+    /// <summary>«назва_result.jpg», а якщо такий уже є — «назва_result1.jpg», «назва_result2.jpg»… Експорт нічого не перезаписує.</summary>
+    internal static string ResultPath(string folder, string photoPath)
+    {
+        string name = Path.GetFileNameWithoutExtension(photoPath) + "_result";
+        string path = Path.Combine(folder, name + ".jpg");
+        for (int i = 1; File.Exists(path); i++) path = Path.Combine(folder, $"{name}{i}.jpg");
+        return path;
+    }
+
+    /// <summary>Задана папка експорту (створюється, якщо її ще немає); null — питати щоразу або папка недоступна.</summary>
+    private string? ExportFolder()
+    {
+        if (_ui.ExportFolder is not { } folder) return null;
+        try
+        {
+            Directory.CreateDirectory(folder);
+            return folder;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ActionText.Text = $"⚠️ Папка експорту недоступна ({ex.Message}) — обери, куди зберегти";
+            return null;
+        }
+    }
+
+    /// <summary>«📁▾» біля експорту: обрати папку, повернутись до «щоразу питати» або відкрити папку в провіднику.</summary>
+    private void OnExportFolderClick(object? sender, RoutedEventArgs e)
+    {
+        var menu = new MenuFlyout();
+        menu.Items.Add(new MenuItem { Header = _ui.ExportFolder is { } f ? $"Зараз: {f}" : "Зараз: щоразу питати", IsEnabled = false });
+        var choose = new MenuItem { Header = "📁 Обрати папку для експорту…" };
+        choose.Click += async (_, _) =>
+        {
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "Папка для експорту",
+                SuggestedStartLocation = await StorageProvider.TryGetFolderFromPathAsync(_ui.ExportFolder ?? _folder ?? ""),
+            });
+            if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path) return;
+            _ui.ExportFolder = path;
+            _ui.Save();
+            UpdateExportFolderTip();
+            ActionText.Text = $"📁 Експорт тепер іде в «{Path.GetFileName(path)}»";
+        };
+        menu.Items.Add(choose);
+        if (_ui.ExportFolder is { } current)
+        {
+            var open = new MenuItem { Header = "📂 Відкрити в провіднику" };
+            open.Click += (_, _) =>
+            {
+                if (Directory.Exists(current))
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(current) { UseShellExecute = true });
+            };
+            var ask = new MenuItem { Header = "❓ Щоразу питати, куди зберегти" };
+            ask.Click += (_, _) =>
+            {
+                _ui.ExportFolder = null;
+                _ui.Save();
+                UpdateExportFolderTip();
+                ActionText.Text = "📁 Під час експорту Lumos знову питатиме, куди зберегти";
+            };
+            menu.Items.Add(open);
+            menu.Items.Add(ask);
+        }
+        menu.ShowAt(ExportFolderButton);
+    }
+
+    private void UpdateExportFolderTip() =>
+        ToolTip.SetTip(ExportFolderButton, _ui.ExportFolder is { } f
+            ? $"Папка для експорту: {f}\nФото зберігаються туди одразу, як «назва_result.jpg»"
+            : "Папка для експорту: щоразу питати\nНатисни, щоб задати постійну");
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {

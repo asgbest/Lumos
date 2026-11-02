@@ -11,7 +11,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Lumos.App</RootNamespace>
     <AssemblyName>Lumos</AssemblyName>
-    <Version>0.1.9</Version>
+    <Version>0.1.10</Version>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Іконка: паличка з «Люмос»-світлом у кільці діафрагми (джерело — Assets\lumos-1024.png). -->

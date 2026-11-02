@@ -87,6 +87,18 @@ public sealed class AiStyleDialog : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
+    /// <summary>Фото переїхало в іншу папку — його варіанти AI теж (вони прив'язані до шляху).</summary>
+    internal static void MoveHistory(string oldPath, string newPath)
+    {
+        if (History.Remove(oldPath, out var kept)) History[newPath] = kept;
+        try
+        {
+            string from = HistoryFile(oldPath), to = HistoryFile(newPath);
+            if (File.Exists(from) && !File.Exists(to)) File.Move(from, to);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
     public AiStyleDialog(AiStyleContext context)
     {
         _context = context;

@@ -65,6 +65,19 @@ public sealed class Catalog : IDisposable
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Фото переїхало в іншу папку — рейтинг і позначка йдуть за ним.</summary>
+    public void Rename(string oldPath, string newPath)
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = """
+            DELETE FROM photos WHERE path = $new;
+            UPDATE photos SET path = $new WHERE path = $old;
+            """;
+        cmd.Parameters.AddWithValue("$old", Path.GetFullPath(oldPath));
+        cmd.Parameters.AddWithValue("$new", Path.GetFullPath(newPath));
+        cmd.ExecuteNonQuery();
+    }
+
     private void Execute(string sql)
     {
         using var cmd = _db.CreateCommand();
