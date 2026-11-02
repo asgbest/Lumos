@@ -163,6 +163,12 @@ public sealed class AiStylePanel : UserControl
         _suggest.Click += async (_, _) => await SuggestAsync();
         var close = new Button { Content = "✕", FontSize = 12, Padding = new Thickness(8, 2), [ToolTip.TipProperty] = "Сховати панель (клавіша A)" };
         close.Click += (_, _) => CloseRequested?.Invoke();
+        var clear = new Button
+        {
+            Content = "🗑 Очистити", FontSize = 12, Padding = new Thickness(8, 2), Margin = new Thickness(0, 0, 6, 0),
+            [ToolTip.TipProperty] = "Видалити всі варіанти Gemini для цього фото (застосовані правки лишаються)",
+        };
+        clear.Click += async (_, _) => await ClearAsync();
 
         Content = new DockPanel
         {
@@ -178,7 +184,7 @@ public sealed class AiStylePanel : UserControl
                         {
                             Children =
                             {
-                                new Border { [DockPanel.DockProperty] = Dock.Right, Child = close },
+                                new StackPanel { [DockPanel.DockProperty] = Dock.Right, Orientation = Orientation.Horizontal, Children = { clear, close } },
                                 new TextBlock
                                 {
                                     Text = "✨ AI-стиліст · " + System.IO.Path.GetFileName(context.Path), FontSize = 14, FontWeight = FontWeight.SemiBold,
@@ -217,6 +223,28 @@ public sealed class AiStylePanel : UserControl
         _context.Ui.AiPro = _pro.IsChecked == true;
         _context.Ui.GeminiModel = string.IsNullOrWhiteSpace(_model.Text) || _model.Text.Trim() == AiStylist.DefaultModel ? null : _model.Text.Trim();
         _context.Ui.Save();
+    }
+
+    /// <summary>«🗑 Очистити»: усі варіанти Gemini цього фото геть — і зі списку, і з диска. Правки фото не змінюються.</summary>
+    private async Task ClearAsync()
+    {
+        string path = _context.Path;
+        var kept = LoadHistory(path);
+        if (kept.Count == 0)
+        {
+            _status.Text = "Варіантів Gemini для цього фото немає.";
+            return;
+        }
+        if (TopLevel.GetTopLevel(this) is Window owner && !await Notice.ConfirmAsync(owner,
+                $"Видалити {kept.Count} варіантів Gemini для цього фото?",
+                "Список очиститься. Те, що вже застосовано до фото, лишається (Ctrl+Z працює як завжди).", "🗑 Видалити"))
+            return;
+        foreach (var look in kept) Thumbs.Remove(look);
+        kept.Clear();
+        _results.Children.Clear();
+        try { File.Delete(HistoryFile(path)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        _status.Text = "🗑 Варіанти Gemini для цього фото видалено.";
     }
 
     /// <summary>Обірвати запит (програму закривають).</summary>

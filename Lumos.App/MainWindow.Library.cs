@@ -365,6 +365,64 @@ public partial class MainWindow
         if (FilterBox.SelectedIndex > 0) ApplyFilter();
     }
 
+    // ── Очистити стрічку ───────────────────────────────────────────────────────
+
+    private void OnClearLibraryClick(object? sender, RoutedEventArgs e) => ClearLibrary();
+
+    /// <summary>
+    /// «✕ Прибрати всі»: стрічка порожня, фото закрите, як після першого запуску (і наступний запуск не відкриває цю папку).
+    /// Файли на диску й правки поруч із ними не змінюються — папку можна відкрити знову.
+    /// </summary>
+    private void ClearLibrary()
+    {
+        if (_allItems.Count == 0 && _photoPath is null) return;
+        CommitEdits();
+        if (_cropMode) SetCropMode(false);
+        if (_healMode) SetHealMode(false);
+        if (_zoomed) SetZoom(false, null);
+        if (_gridMode) SetGridMode(false);
+        HideAiPanel();
+        _aiPanel = null;
+        AiHost.Child = null;
+
+        _openGeneration++; // незавершене відкриття чи довантаження — вже нікуди
+        _thumbsCts?.Cancel();
+        _photoPath = null;
+        _photo = null;
+        _preview = null;
+        _full = null;
+        _fullTask = null;
+        _bitmap = null;
+        _prefetch.Clear();
+        _maskIndex = -1;
+        _history = [new()];
+        _historyIndex = 0;
+        ApplySettings(new DevelopSettings());
+        UpdateMaskOverlay();
+        UpdateHistoryButtons();
+
+        _syncingSelection = true;
+        _allItems = [];
+        _items.Clear();
+        _syncingSelection = false;
+        _currentItem = null;
+        _folder = null;
+        _ui.LastFolder = null;
+        _ui.LastPhoto = null;
+        _ui.Save();
+
+        LibraryPanel.IsVisible = false;
+        GridToggle.IsEnabled = false;
+        PhotoView.Source = null;
+        Title = "Lumos";
+        FileNameText.Text = CameraText.Text = ShotText.Text = "";
+        StatusText.Text = "Відкрий папку з фото або перетягни сюди фото чи папку\nRAW · JPEG · PNG · TIFF · HEIC · WebP";
+        StatusText.IsVisible = true;
+        foreach (var body in _sectionBodies) body.IsEnabled = false;
+        ZoomToggle.IsEnabled = CropToggle.IsEnabled = BeforeToggle.IsEnabled = SplitToggle.IsEnabled = ResetButton.IsEnabled = ExportButton.IsEnabled = AiButton.IsEnabled = false;
+        ActionText.Text = "✕ Стрічку очищено — файли на диску не змінювались";
+    }
+
     // ── Відібрані ──────────────────────────────────────────────────────────────
 
     private async void OnMovePicksClick(object? sender, RoutedEventArgs e) => await MovePicksAsync();

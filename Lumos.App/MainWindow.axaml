@@ -96,6 +96,8 @@
         <DockPanel>
           <DockPanel DockPanel.Dock="Top" Margin="10,4,10,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+              <Button Content="✕ Прибрати всі" Classes="libraryButton" Click="OnClearLibraryClick"
+                      ToolTip.Tip="Прибрати всі фото зі стрічки й закрити фото. Файли на диску й правки не змінюються — папку можна відкрити знову" />
               <Button x:Name="AiSeriesButton" Content="✨ AI для серії" Classes="libraryButton ai" Click="OnAiSeriesClick"
                       ToolTip.Tip="Спільний стиль від Gemini для вибраних фото (Ctrl або Shift+клік у стрічці) — серія стане однорідною" />
               <Button Content="📋 Копіювати правки" Classes="libraryButton" Click="OnCopySettingsClick" ToolTip.Tip="Запам'ятати правки поточного фото, крім обрізки (Ctrl+Shift+C)" />
