@@ -7,16 +7,22 @@ using Thumb = Lumos.Core.Thumb;
 
 namespace Lumos.App;
 
-/// <summary>Що потрібно діалогу «✨ AI» від головного вікна: фото, його прев'ю, поточні правки і як накласти варіант.</summary>
-public sealed record AiStyleContext(Photo Photo, string Path, LinearImage Preview, ToneProfile Profile, DevelopSettings Current,
-    UiState Ui, Action<DevelopSettings, string> Apply);
+/// <summary>
+/// Що потрібно панелі «✨ AI» від головного вікна: фото, його прев'ю, поточні правки (на момент запиту — панель живе довго,
+/// а обрізку тим часом можуть змінити) і як накласти варіант.
+/// </summary>
+public sealed record AiStyleContext(Photo Photo, string Path, LinearImage Preview, ToneProfile Profile, Func<DevelopSettings> GetCurrent,
+    UiState Ui, Action<DevelopSettings, string> Apply)
+{
+    public DevelopSettings Current => GetCurrent();
+}
 
 /// <summary>
-/// «✨ AI-стиліст»: зменшена копія фото й опис можливостей Lumos ідуть у Gemini, той пропонує кілька стилістик
-/// одразу числами повзунків (і маски, де треба), а програма показує кожен варіант прев'ю — клік накладає його на фото.
+/// «✨ AI-стиліст» — панель праворуч від фото: зменшена копія фото й опис можливостей Lumos ідуть у Gemini, той пропонує
+/// кілька стилістик одразу числами повзунків (і маски, де треба), а програма показує кожен варіант прев'ю — клік накладає його на фото.
 /// Ключ API вводиться тут і зберігається зашифрованим лише на цьому комп'ютері.
 /// </summary>
-public sealed class AiStyleDialog : Window
+public sealed class AiStylePanel : UserControl
 {
     private const string KeyName = "gemini-api-key";
     private const int Looks = 4;
@@ -107,16 +113,18 @@ public sealed class AiStyleDialog : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
-    public AiStyleDialog(AiStyleContext context)
+    /// <summary>Натиснули «✕» — головне вікно ховає панель (запит, якщо йде, доходить до кінця й лишається в історії).</summary>
+    public event Action? CloseRequested;
+
+    /// <summary>Для якого фото панель.</summary>
+    public string PhotoPath => _context.Path;
+
+    /// <summary>Gemini ще думає — панель не замінюють панеллю іншого фото, щоб не обірвати запит.</summary>
+    public bool Busy => !_suggest.IsEnabled;
+
+    public AiStylePanel(AiStyleContext context)
     {
         _context = context;
-        Title = "✨ AI-стиліст";
-        Width = 760;
-        Height = 820;
-        MinWidth = 560;
-        MinHeight = 480;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = new SolidColorBrush(Color.Parse("#262626"));
 
         _model.Text = context.Ui.GeminiModel ?? AiStylist.DefaultModel;
         _wish.Text = context.Ui.AiWish;
@@ -153,18 +161,12 @@ public sealed class AiStyleDialog : Window
         var keyToggle = new Button { Content = "🔑 Ключ", FontSize = 12 };
         keyToggle.Click += (_, _) => _keyPanel.IsVisible = !_keyPanel.IsVisible;
         _suggest.Click += async (_, _) => await SuggestAsync();
-        Closing += (_, _) =>
-        {
-            _cancel?.Cancel();
-            _context.Ui.AiWish = _wish.Text;
-            _context.Ui.AiPro = _pro.IsChecked == true;
-            _context.Ui.GeminiModel = string.IsNullOrWhiteSpace(_model.Text) || _model.Text.Trim() == AiStylist.DefaultModel ? null : _model.Text.Trim();
-            _context.Ui.Save();
-        };
+        var close = new Button { Content = "✕", FontSize = 12, Padding = new Thickness(8, 2), [ToolTip.TipProperty] = "Сховати панель (клавіша A)" };
+        close.Click += (_, _) => CloseRequested?.Invoke();
 
         Content = new DockPanel
         {
-            Margin = new Thickness(18),
+            Margin = new Thickness(14, 10, 14, 0),
             Children =
             {
                 new StackPanel
@@ -172,37 +174,53 @@ public sealed class AiStyleDialog : Window
                     [DockPanel.DockProperty] = Dock.Top, Spacing = 8,
                     Children =
                     {
-                        _keyPanel,
-                        _wish,
                         new DockPanel
                         {
                             Children =
                             {
-                                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, [DockPanel.DockProperty] = Dock.Left,
-                                    Margin = new Thickness(0, 0, 12, 0), Children = { _suggest, keyToggle, _review, _pro } },
-                                _status,
+                                new Border { [DockPanel.DockProperty] = Dock.Right, Child = close },
+                                new TextBlock
+                                {
+                                    Text = "✨ AI-стиліст · " + System.IO.Path.GetFileName(context.Path), FontSize = 14, FontWeight = FontWeight.SemiBold,
+                                    Foreground = Text, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+                                },
                             },
                         },
+                        _keyPanel,
+                        _wish,
+                        new WrapPanel { Orientation = Orientation.Horizontal, Children = { _suggest, keyToggle, _review, _pro },
+                            ItemSpacing = 8, LineSpacing = 6 },
+                        _status,
                         new TextBlock
                         {
-                            Text = $"Gemini отримає зменшену копію фото ({AiStylist.ImageSide} px) і дані зйомки, а для перевірки — рендери варіантів " +
-                                   $"({AiStylist.RenderSide} px) з вимірюваннями; з перевіркою відповідь іде ~1–2 хв, у режимі 🎓 Pro — ~3 хв " +
-                                   "(ще й карта ділянок і план). Варіант накладається на фото замість поточних правок (обрізка й прибрані плями " +
-                                   "лишаються); Ctrl+Z — повернути як було.",
+                            Text = $"Gemini отримає копію фото ({AiStylist.ImageSide} px), а для перевірки — рендери варіантів з вимірюваннями; " +
+                                   "~1–2 хв, у 🎓 Pro — ~3 хв. «Застосувати» замінює поточні правки (обрізка й прибрані плями лишаються); Ctrl+Z — назад.",
                             TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = Dim,
                         },
                     },
                 },
                 new Grid
                 {
-                    Margin = new Thickness(0, 12, 0, 0),
+                    Margin = new Thickness(0, 10, 0, 0),
                     Children = { new ScrollViewer { Content = _results, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled }, _waiting },
                 },
             },
         };
 
-        Opened += async (_, _) => await ShowKeptAsync();
+        _ = ShowKeptAsync();
     }
+
+    /// <summary>Побажання, модель і «Pro» — у налаштування (панель ховають чи замінюють панеллю іншого фото).</summary>
+    public void SaveUi()
+    {
+        _context.Ui.AiWish = _wish.Text;
+        _context.Ui.AiPro = _pro.IsChecked == true;
+        _context.Ui.GeminiModel = string.IsNullOrWhiteSpace(_model.Text) || _model.Text.Trim() == AiStylist.DefaultModel ? null : _model.Text.Trim();
+        _context.Ui.Save();
+    }
+
+    /// <summary>Обірвати запит (програму закривають).</summary>
+    public void Cancel() => _cancel?.Cancel();
 
     /// <summary>Попередні варіанти цього фото — одразу при відкритті вікна.</summary>
     private async Task ShowKeptAsync()
@@ -394,8 +412,11 @@ public sealed class AiStyleDialog : Window
             info.Children.Add(new TextBlock { Text = "Пропущено (немає моделі ШІ): " + string.Join(", ", skipped), FontSize = 11, Foreground = Dim, TextWrapping = TextWrapping.Wrap });
         info.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0), Children = { apply } });
 
-        var image = new Image { Source = MainWindow.ToBitmap(thumb), Width = 240, Height = 240 * thumb.Height / Math.Max(1, thumb.Width), Stretch = Stretch.Uniform };
-        if (image.Height > 240) (image.Width, image.Height) = (240.0 * thumb.Width / thumb.Height, 240);
+        // Панель вузька — прев'ю до 160 px по довшій стороні, текст праворуч.
+        const double side = 160;
+        var image = new Image { Source = MainWindow.ToBitmap(thumb), Width = side, Height = side * thumb.Height / Math.Max(1, thumb.Width), Stretch = Stretch.Uniform };
+        if (image.Height > side) (image.Width, image.Height) = (side * thumb.Width / thumb.Height, side);
+        image.VerticalAlignment = VerticalAlignment.Top;
         var row = new DockPanel();
         DockPanel.SetDock(image, Dock.Left);
         row.Children.Add(image);

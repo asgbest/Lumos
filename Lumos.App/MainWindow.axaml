@@ -66,6 +66,9 @@
 
     <!-- Фото зверху, стрічка мініатюр знизу; у режимі «Сітка» мініатюри займають усе місце -->
     <Grid x:Name="CenterGrid" RowDefinitions="*,Auto">
+      <!-- «✨ AI» — панель варіантів праворуч від фото (а не окреме вікно), щоб порівнювати їх із самим фото -->
+      <DockPanel x:Name="PhotoRow">
+      <Border x:Name="AiHost" DockPanel.Dock="Right" Width="460" Background="#262626" BorderBrush="#333" BorderThickness="1,0,0,0" IsVisible="False" />
       <Border x:Name="PhotoBorder" Background="#121212">
         <Grid x:Name="PhotoArea" Background="Transparent">
           <Image x:Name="PhotoView" Stretch="Uniform" Margin="20" RenderOptions.BitmapInterpolationMode="HighQuality" />
@@ -87,6 +90,7 @@
                      Text="Відкрий папку з фото або перетягни сюди фото чи папку&#10;RAW · JPEG · PNG · TIFF · HEIC · WebP" />
         </Grid>
       </Border>
+      </DockPanel>
 
       <Border x:Name="LibraryPanel" Grid.Row="1" Background="#1B1B1B" BorderBrush="#333" BorderThickness="0,1,0,0" IsVisible="False">
         <DockPanel>

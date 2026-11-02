@@ -92,6 +92,11 @@ public partial class MainWindow : Window
         KeyDown += OnKeyDown;
         _commitTimer.Tick += (_, _) => CommitEdits();
         Closing += (_, _) => CommitEdits();
+        Closing += (_, _) =>
+        {
+            _aiPanel?.SaveUi();
+            _aiPanel?.Cancel();
+        };
         // Закрили посеред експорту — дочекатися його, інакше JPEG так і не з'явиться.
         Closing += async (_, e) =>
         {
@@ -213,6 +218,7 @@ public partial class MainWindow : Window
             _ui.LastPhoto = path;
             _ui.Save();
             PrefetchNeighbours();
+            FollowAiPanel();
         }
         catch (Exception ex)
         {
@@ -336,24 +342,61 @@ public partial class MainWindow : Window
 
     private async void OnExportClick(object? sender, RoutedEventArgs e) => await ExportAsync();
 
-    private async void OnAiClick(object? sender, RoutedEventArgs e) => await OpenAiStylistAsync();
+    private void OnAiClick(object? sender, RoutedEventArgs e) => ToggleAiPanel();
 
-    /// <summary>«✨ AI»: вікно з варіантами від Gemini; вибраний варіант замінює правки фото (окремий крок історії).</summary>
-    private async Task OpenAiStylistAsync()
+    private AiStylePanel? _aiPanel;
+
+    /// <summary>«✨ AI» (клавіша A): показати чи сховати панель варіантів праворуч від фото.</summary>
+    private void ToggleAiPanel()
+    {
+        if (AiHost.IsVisible && _aiPanel?.PhotoPath == _photoPath) HideAiPanel();
+        else ShowAiPanel();
+    }
+
+    private void HideAiPanel()
+    {
+        AiHost.IsVisible = false;
+        _aiPanel?.SaveUi();
+    }
+
+    /// <summary>
+    /// Панель для поточного фото: варіанти від Gemini; вибраний замінює правки фото (окремий крок історії).
+    /// Якщо панель іншого фото ще чекає на Gemini, вона лишається (запит не обривається), а кнопка «✨ AI» покаже нову, коли він завершиться.
+    /// </summary>
+    private void ShowAiPanel()
     {
         if (_photoPath is not { } path || _photo is not { } photo || _preview is not { } preview) return;
+        if (_gridMode) SetGridMode(false);
         CommitEdits();
-        var context = new AiStyleContext(photo, path, preview, _profile, _settings.Copy(), _ui, (settings, name) =>
+        if (_aiPanel is null || (_aiPanel.PhotoPath != path && !_aiPanel.Busy))
         {
-            if (_photoPath != path) return; // поки вікно було відкрите, перейшли на інше фото
-            CommitEdits();
-            if (_healMode) SetHealMode(false);
-            _maskIndex = -1;
-            ApplySettings(settings);
-            CommitEdits();
-            ActionText.Text = $"✨ Стиль «{name}» від Gemini застосовано (Ctrl+Z — скасувати)";
-        });
-        await new AiStyleDialog(context).ShowDialog(this);
+            _aiPanel?.SaveUi();
+            var context = new AiStyleContext(photo, path, preview, _profile,
+                () => _photoPath == path ? _settings.Copy() : EditSidecar.Load(path), _ui, (settings, name) =>
+                {
+                    if (_photoPath != path)
+                    {
+                        ActionText.Text = $"✨ «{name}» — для {Path.GetFileName(path)}: відкрий те фото, щоб застосувати";
+                        return;
+                    }
+                    CommitEdits();
+                    if (_healMode) SetHealMode(false);
+                    _maskIndex = -1;
+                    ApplySettings(settings);
+                    CommitEdits();
+                    ActionText.Text = $"✨ Стиль «{name}» від Gemini застосовано (Ctrl+Z — скасувати)";
+                });
+            _aiPanel = new AiStylePanel(context);
+            _aiPanel.CloseRequested += HideAiPanel;
+            AiHost.Child = _aiPanel;
+        }
+        AiHost.IsVisible = true;
+    }
+
+    /// <summary>Відкрили інше фото, а панель «✨ AI» видно — вона переходить на нове (якщо не чекає на Gemini для попереднього).</summary>
+    private void FollowAiPanel()
+    {
+        if (AiHost.IsVisible && _aiPanel is { Busy: false } panel && panel.PhotoPath != _photoPath) ShowAiPanel();
     }
 
     /// <summary>Скільки експортів іще йде — поки їх не закінчено, вікно не закривається (інакше файл не з'явиться).</summary>
@@ -531,7 +574,7 @@ public partial class MainWindow : Window
         else if (e.Key is Key.Enter or Key.Escape && _cropMode) SetCropMode(false);
         // Відновлення: H — увімкнути, Delete — прибрати вибрану латку, [ ] — розмір, Esc — зняти вибір, потім вийти.
         else if (e.Key == Key.H && _photoPath is not null) SetHealMode(!_healMode);
-        else if (e.Key == Key.A && AiButton.IsEnabled) _ = OpenAiStylistAsync();
+        else if (e.Key == Key.A && AiButton.IsEnabled) ToggleAiPanel();
         else if (e.Key is Key.Delete or Key.Back && _healMode) DeleteSelectedHeal();
         else if (e.Key is Key.OemOpenBrackets or Key.OemCloseBrackets && _healMode) ChangeHealSize(e.Key == Key.OemCloseBrackets ? 2 : -2);
         else if (e.Key == Key.Escape && _healMode)

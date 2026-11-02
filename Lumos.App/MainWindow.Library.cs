@@ -292,6 +292,7 @@ public partial class MainWindow
             if (_zoomed) SetZoom(false, null);
         }
         PhotoBorder.IsVisible = !on;
+        PhotoRow.IsVisible = !on; // разом із фото ховається й панель «✨ AI»
         Grid.SetRow(LibraryPanel, on ? 0 : 1);
         Grid.SetRowSpan(LibraryPanel, on ? 2 : 1);
         LibraryList.Classes.Set("strip", !on);
@@ -414,7 +415,7 @@ public partial class MainWindow
             {
                 string newPath = await Task.Run(() => PhotoMover.Move(item.Path, target));
                 _catalog.Rename(item.Path, newPath);
-                AiStyleDialog.MoveHistory(item.Path, newPath);
+                AiStylePanel.MoveHistory(item.Path, newPath);
                 moved.Add(item);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
