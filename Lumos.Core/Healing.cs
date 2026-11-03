@@ -21,6 +21,13 @@ public sealed record HealSpot(HealMode Mode, double Size, double Feather, double
     public double PatchW { get; init; }
     public double PatchH { get; init; }
     public double PatchScale { get; init; } = 1;
+    /// <summary>Сіра PNG у прямокутнику латки: де саме її накладати (тонкий предмет на зразок дроту); null — увесь слід пензля.</summary>
+    public string? PatchMask { get; init; }
+    /// <summary>
+    /// Довгий мазок ШІ-видалення (дріт через увесь кадр) — частини по кількасот пікселів, кожна зі своєю латкою:
+    /// одна латка на весь мазок вийшла б розмитою смугою. Для людини це одна латка (Points — увесь мазок).
+    /// </summary>
+    public EquatableList<HealSpot>? Parts { get; init; }
 }
 
 /// <summary>
@@ -44,6 +51,11 @@ public static class Healing
     private static void ApplySpot(LinearImage img, HealSpot spot)
     {
         if (spot.Points.Count == 0) return;
+        if (spot.Parts is { Count: > 0 } parts)
+        {
+            foreach (var part in parts) ApplySpot(img, part with { Opacity = spot.Opacity });
+            return;
+        }
         int W = img.Width, H = img.Height;
         // Усередині кола пензля латка непрозора повністю (пляма має зникнути цілком), м'який перехід — назовні.
         double hard = Math.Max(1, spot.Size * Math.Max(W, H) / 2);

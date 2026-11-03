@@ -28,7 +28,8 @@
           <Button x:Name="ExportFolderButton" Content="📁▾" Padding="8,2" Margin="-6,0,0,0" Click="OnExportFolderClick"
                   ToolTip.Tip="Папка для експорту" />
         </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="12">
+        <!-- ClipToBounds: довгий текст дії обрізається, а не налазить на кнопки праворуч (повністю — у підказці) -->
+        <StackPanel Orientation="Horizontal" Spacing="12" ClipToBounds="True" Margin="0,0,12,0">
           <TextBlock Text="Lumos" FontSize="19" FontWeight="Bold" LetterSpacing="-0.5" VerticalAlignment="Center" Margin="2,0,4,1"
                      Foreground="{StaticResource LumosTitle}" />
           <Button Content="📁 Папка" Click="OnOpenFolderClick" ToolTip.Tip="Відкрити папку з фото (Ctrl+Shift+O)" />

@@ -155,7 +155,11 @@ public partial class MainWindow
         var source = _full ?? preview;
         try
         {
-            var result = await Task.Run(() => Inpainter.Generate(ImageGeometry.Apply(source, settings, crop: false), spot));
+            void Progress(int done, int total) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (_removing) ActionText.Text = $"🪄 ШІ прибирає довгий предмет частинами: {done + 1} з {total}…";
+            });
+            var result = await Task.Run(() => Inpainter.Generate(ImageGeometry.Apply(source, settings, crop: false), spot, Progress));
             if (_photoPath != path) return;
             _settings.Heals = _settings.Heals.Add(result.Spot);
             _healIndex = _settings.Heals.Count - 1;
