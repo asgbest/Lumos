@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 namespace Lumos.Core;
 
 /// <summary>
-/// Нейромережа для ШІ-маски: звідки завантажити (null — автоматично не завантажується), скільки важить,
+/// Нейромережа для ШІ-маски: звідки завантажити (Url чи реліз Lumos на GitHub), скільки важить,
 /// чия й під якою ліцензією. ImageNet — нормалізація входу за статистикою ImageNet; Channels — скільки масок видає за раз;
 /// Refocus — другий прохід на ділянці навколо знайденого (для малих об'єктів у кадрі).
 /// </summary>
@@ -12,6 +12,14 @@ public sealed record AiModel(string Title, string FileName, string? Url, long Ap
     public bool ImageNet { get; init; }
     public int Channels { get; init; } = 1;
     public bool Refocus { get; init; }
+    /// <summary>Тег релізу Lumos на GitHub, де лежить файл моделі (коли Url немає).</summary>
+    public string? GitHubRelease { get; init; }
+
+    /// <summary>Чи може Lumos сам завантажити модель (з Url чи з релізу, якщо є токен GitHub).</summary>
+    public bool CanDownload => Url is not null || (GitHubRelease is not null && AiModels.GitHubToken.Length > 0);
+
+    /// <summary>Звідки качається — для вікна завантаження й документації.</summary>
+    public string? SourceHost => Url is not null ? new Uri(Url).Host : CanDownload ? "github.com (релізи Lumos)" : null;
 }
 
 /// <summary>
@@ -35,12 +43,13 @@ public static class AiModels
     /// <summary>
     /// UperNet + ConvNeXt-Small, навчена на ADE20K (OpenMMLab, huggingface.co/openmmlab/upernet-convnext-small), MIT.
     /// Перетворена в ONNX так, що видає одразу 6 груп класів (див. <see cref="AiMaskTypes"/>): вода, рослинність, гори,
-    /// будівлі, природний ґрунт, штучне покриття. Готового ONNX-файлу в мережі немає — його треба покласти в папку моделей.
+    /// будівлі, природний ґрунт, штучне покриття. Готового ONNX-файлу в мережі немає — він лежить у релізі «Lumos-models»
+    /// репозиторію Lumos (приватного, тож качається через GitHub API тим самим токеном, що й оновлення).
     /// </summary>
     public static readonly AiModel Landscape = new(
         "Ландшафт (UperNet ConvNeXt-Small, ADE20K)", "landscape-upernet-convnext-small.onnx", null,
         324_000_000, "a70d8b4bfaf3507a3eb51478fc3db63c", "MIT", "OpenMMLab (huggingface.co/openmmlab/upernet-convnext-small)", 768)
-    { ImageNet = true, Channels = 6 };
+    { ImageNet = true, Channels = 6, GitHubRelease = "Lumos-models" };
 
     /// <summary>
     /// LaMa (big-lama, Суворов та ін., Samsung AI Center) у ONNX від Carve, Apache-2.0 — «ШІ-видалення»: домальовує фон
@@ -72,6 +81,37 @@ public static class AiModels
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
 
+    /// <summary>Репозиторій з релізами Lumos і токен лише для читання (задає програма під час запуску; порожній — не качаємо звідти).</summary>
+    public static string GitHubRepository { get; set; } = "";
+    public static string GitHubToken { get; set; } = "";
+
+    /// <summary>Запит на файл моделі: пряме посилання або файл релізу через GitHub API (репозиторій приватний).</summary>
+    private static async Task<HttpRequestMessage> RequestFor(AiModel model, CancellationToken cancel)
+    {
+        if (model.Url is { } url) return new HttpRequestMessage(HttpMethod.Get, url);
+        if (model.GitHubRelease is not { } tag || GitHubToken.Length == 0)
+            throw new InvalidOperationException("Цю модель не можна завантажити автоматично.");
+
+        HttpRequestMessage Api(string address, string accept)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, address);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", GitHubToken);
+            request.Headers.UserAgent.ParseAdd("Lumos");
+            request.Headers.Accept.ParseAdd(accept);
+            request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
+            return request;
+        }
+        using var find = Api($"https://api.github.com/repos/{GitHubRepository}/releases/tags/{tag}", "application/vnd.github+json");
+        using var response = await Http.SendAsync(find, cancel);
+        response.EnsureSuccessStatusCode();
+        var release = System.Text.Json.Nodes.JsonNode.Parse(await response.Content.ReadAsStringAsync(cancel));
+        long id = release?["assets"]?.AsArray()
+            .FirstOrDefault(a => string.Equals((string?)a?["name"], model.FileName, StringComparison.OrdinalIgnoreCase))?["id"]?.GetValue<long>()
+            ?? throw new InvalidDataException($"У релізі {tag} немає файлу {model.FileName}.");
+        // Сам файл — з application/octet-stream; GitHub перенаправляє на сховище, і заголовок авторизації туди не йде.
+        return Api($"https://api.github.com/repos/{GitHubRepository}/releases/assets/{id}", "application/octet-stream");
+    }
+
     /// <summary>
     /// Завантажує модель у тимчасовий файл і лише після повного (і, де є контрольна сума, перевіреного) завантаження
     /// кладе на місце — обірване завантаження не лишить «биту» модель.
@@ -82,8 +122,8 @@ public static class AiModels
         string target = PathOf(model), temp = target + ".download";
         try
         {
-            if (model.Url is null) throw new InvalidOperationException("Цю модель не можна завантажити автоматично.");
-            using var response = await Http.GetAsync(model.Url,HttpCompletionOption.ResponseHeadersRead, cancel);
+            using var request = await RequestFor(model, cancel);
+            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel);
             response.EnsureSuccessStatusCode();
             long? total = response.Content.Headers.ContentLength;
             await using (var source = await response.Content.ReadAsStreamAsync(cancel))

@@ -27,7 +27,7 @@ public sealed class ModelDownloadDialog : Window
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = new SolidColorBrush(Color.Parse("#262626"));
-        if (model.Url is null)
+        if (!model.CanDownload)
         {
             // Завантажувати нізвідки — замість цього відкрити папку моделей.
             _download.Content = "📁 Відкрити папку";
@@ -44,7 +44,7 @@ public sealed class ModelDownloadDialog : Window
             _cancel.Cancel();
             Close(false);
         };
-        if (model.Url is not null) _download.Click += async (_, _) => await DownloadAsync();
+        if (model.CanDownload) _download.Click += async (_, _) => await DownloadAsync();
         Closing += (_, _) => _cancel.Cancel();
 
         IBrush text = new SolidColorBrush(Color.Parse("#D8D8D8"));
@@ -57,7 +57,7 @@ public sealed class ModelDownloadDialog : Window
                 new TextBlock { Text = model.Title, FontWeight = FontWeight.SemiBold, FontSize = 14, Foreground = text },
                 new SelectableTextBlock
                 {
-                    Text = model.Url is null
+                    Text = !model.CanDownload
                         ? $"Для цієї маски потрібна нейромережа (~{model.ApproxBytes / 1_000_000} МБ), яку не можна завантажити автоматично. " +
                           $"Поклади файл «{model.FileName}» у папку\n{AiModels.Folder}\nі натисни маску ще раз."
                         : $"Для цієї маски потрібна нейромережа (~{model.ApproxBytes / 1_000_000} МБ). " +
@@ -66,7 +66,7 @@ public sealed class ModelDownloadDialog : Window
                 },
                 new TextBlock
                 {
-                    Text = $"Автори: {model.Authors}\nЛіцензія: {model.License}" + (model.Url is null ? "" : $"\nДжерело: {new Uri(model.Url).Host}"),
+                    Text = $"Автори: {model.Authors}\nЛіцензія: {model.License}" + (model.SourceHost is { } host ? $"\nДжерело: {host}" : ""),
                     TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.Parse("#909090")), FontSize = 11,
                 },
                 _progress,
@@ -97,7 +97,7 @@ public sealed class ModelDownloadDialog : Window
             Close(true);
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException)
+        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or InvalidOperationException)
         {
             _status.Text = $"⚠️ Не вдалося завантажити: {ex.Message}";
             _download.IsEnabled = true;

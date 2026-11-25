@@ -550,6 +550,11 @@ public partial class MainWindow : Window
             ? $"Папка для експорту: {f}\nФото зберігаються туди одразу, як «назва_result.jpg»"
             : "Папка для експорту: щоразу питати\nНатисни, щоб задати постійну");
 
+    // «❓»: довідка (F1) і «Про програму».
+    private void ShowHelp() => new HelpWindow().ShowDialog(this);
+    private void OnHelpMenuClick(object? sender, RoutedEventArgs e) => ShowHelp();
+    private void OnAboutClick(object? sender, RoutedEventArgs e) => new AboutWindow().ShowDialog(this);
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
@@ -557,7 +562,8 @@ public partial class MainWindow : Window
         // Поки вписують число в поле, звичайні літери — це текст, а не команди.
         bool typing = FocusManager?.GetFocusedElement() is TextBox;
 
-        if (ctrl && shift && e.Key == Key.O) _ = PickFolderAsync();
+        if (e.Key == Key.F1) ShowHelp();
+        else if (ctrl && shift && e.Key == Key.O) _ = PickFolderAsync();
         else if (ctrl && e.Key == Key.O) _ = PickAndOpenAsync();
         else if (ctrl && e.Key == Key.E) _ = ExportAsync();
         else if (ctrl && shift && e.Key == Key.C) CopySettings();

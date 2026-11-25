@@ -27,6 +27,14 @@
                   ToolTip.Tip="Повна роздільність, найвища якість (Ctrl+E)" />
           <Button x:Name="ExportFolderButton" Content="📁▾" Padding="8,2" Margin="-6,0,0,0" Click="OnExportFolderClick"
                   ToolTip.Tip="Папка для експорту" />
+          <Button Content="❓" Padding="10,2" ToolTip.Tip="Довідка (F1) і «Про програму»">
+            <Button.Flyout>
+              <MenuFlyout Placement="BottomEdgeAlignedRight">
+                <MenuItem Header="❓ Довідка (F1)" Click="OnHelpMenuClick" />
+                <MenuItem Header="ℹ️ Про програму" Click="OnAboutClick" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
         </StackPanel>
         <!-- ClipToBounds: довгий текст дії обрізається, а не налазить на кнопки праворуч (повністю — у підказці) -->
         <StackPanel Orientation="Horizontal" Spacing="12" ClipToBounds="True" Margin="0,0,12,0">

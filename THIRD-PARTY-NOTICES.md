@@ -8,8 +8,7 @@ Lumos використовує такі бібліотеки й моделі. Д
 |---|---|---|---|---|
 | IS-Net «general use» (`isnet-general-use.onnx`) | ШІ-маска «Об'єкт» | Xuebin Qin та ін., проєкт DIS | Apache-2.0 | https://github.com/xuebinqin/DIS (ONNX-файл — з релізу https://github.com/danielgatis/rembg) |
 | U²-Net skyseg (`skyseg.onnx`) | ШІ-маска «Небо» | xiongzhu666 (архітектура U²-Net — Xuebin Qin та ін.) | MIT | https://github.com/xiongzhu666/Sky-Segmentation-and-Post-processing (ONNX-файл — https://huggingface.co/JianyuanWang/skyseg) |
-| UperNet ConvNeXt-Small, ADE20K (`landscape-upernet-convnext-small.onnx`) | ШІ-маски «Ландшафт»: вода, рослинність, гори, будівлі, ґрунт, покриття | OpenMMLab (архітектури UperNet — Tete Xiao та ін., ConvNeXt — Zhuang Liu та ін.; набір ADE20K — MIT CSAIL) | MIT | https://huggingface.co/openmmlab/upernet-convnext-small (у ONNX перетворено скриптом `tools/export_landscape.py`) |
-
+| UperNet ConvNeXt-Small, ADE20K (`landscape-upernet-convnext-small.onnx`) | ШІ-маски «Ландшафт»: вода, рослинність, гори, будівлі, ґрунт, покриття | OpenMMLab (архітектури UperNet — Tete Xiao та ін., ConvNeXt — Zhuang Liu та ін.; набір ADE20K — MIT CSAIL) | MIT | https://huggingface.co/openmmlab/upernet-convnext-small (у ONNX перетворено скриптом `tools/export_landscape.py`; готовий файл — у релізі «Lumos-models» репозиторію Lumos, програма завантажує його сама) |
 | LaMa / big-lama (`lama_fp32.onnx`) | ШІ-видалення предметів | Roman Suvorov та ін., Samsung AI Center (ONNX — Carve) | Apache-2.0 | https://github.com/advimman/lama (ONNX-файл — https://huggingface.co/Carve/LaMa-ONNX) |
 | Depth Anything V2 Small (`depth-anything-v2-small.onnx`) | карта глибини для розмиття об'єктива | Lihe Yang та ін. (ONNX — onnx-community) | Apache-2.0 | https://github.com/DepthAnything/Depth-Anything-V2 (ONNX-файл — https://huggingface.co/onnx-community/depth-anything-v2-small) |
 

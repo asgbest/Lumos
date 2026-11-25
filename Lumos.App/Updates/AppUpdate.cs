@@ -1,6 +1,7 @@
 using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Lumos.Core;
 
 namespace Lumos.App.Updates;
 
@@ -14,6 +15,13 @@ public static class AppUpdate
 
     public static readonly ReleaseUpdater Updater =
         new("Lumos-v", "Lumos.exe", Assembly.GetExecutingAssembly(), Repository, ReadToken());
+
+    /// <summary>Той самий токен (лише читання) — і для моделей ШІ з релізу «Lumos-models» (див. AiModels.Landscape).</summary>
+    public static void ShareTokenWithModels()
+    {
+        AiModels.GitHubRepository = Repository;
+        AiModels.GitHubToken = ReadToken();
+    }
 
     /// <summary>З файлу «update-token.txt», вбудованого при збиранні (у git його немає). Немає — без автооновлення.</summary>
     private static string ReadToken()
