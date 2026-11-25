@@ -21,7 +21,8 @@ public sealed class ModelDownloadDialog : Window
     public ModelDownloadDialog(AiModel model)
     {
         _model = model;
-        Title = "Потрібна модель ШІ";
+        Title = model.CanDownload ? "⚠️ Завантажити нейромережу?" : "Потрібна модель ШІ";
+        if (model.CanDownload) _download.Content = "⬇️ Так, завантажити";
         Width = 460;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
@@ -38,7 +39,7 @@ public sealed class ModelDownloadDialog : Window
             };
         }
 
-        var cancel = new Button { Content = "Скасувати", IsCancel = true };
+        var cancel = new Button { Content = model.CanDownload ? "Ні" : "Скасувати", IsCancel = true };
         cancel.Click += (_, _) =>
         {
             _cancel.Cancel();
@@ -58,11 +59,29 @@ public sealed class ModelDownloadDialog : Window
                 new SelectableTextBlock
                 {
                     Text = !model.CanDownload
-                        ? $"Для цієї маски потрібна нейромережа (~{model.ApproxBytes / 1_000_000} МБ), яку не можна завантажити автоматично. " +
-                          $"Поклади файл «{model.FileName}» у папку\n{AiModels.Folder}\nі натисни маску ще раз."
-                        : $"Для цієї маски потрібна нейромережа (~{model.ApproxBytes / 1_000_000} МБ). " +
+                        ? $"Для цієї дії потрібна нейромережа (~{model.ApproxBytes / 1_000_000} МБ), яку не можна завантажити автоматично. " +
+                          $"Поклади файл «{model.FileName}» у папку\n{AiModels.Folder}\nі спробуй ще раз."
+                        : $"Для цієї дії потрібна нейромережа (~{model.ApproxBytes / 1_000_000} МБ). " +
                           "Вона завантажується один раз і далі працює без інтернету — на відеокарті, а якщо не вийде, на процесорі.",
                     TextWrapping = TextWrapping.Wrap, Foreground = text, FontSize = 12,
+                },
+                new Border
+                {
+                    IsVisible = model.CanDownload,
+                    Background = new SolidColorBrush(Color.Parse("#3A3020")),
+                    BorderBrush = new SolidColorBrush(Color.Parse("#C9A227")),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(10, 8),
+                    Margin = new Thickness(0, 4),
+                    Child = new TextBlock
+                    {
+                        Text = $"⚠️ Буде завантажено ~{model.ApproxBytes / 1_000_000} МБ з інтернету" +
+                               (model.SourceHost is { } src ? $" ({src})" : "") +
+                               $" у папку {AiModels.Folder}. На лімітному чи мобільному інтернеті це може коштувати грошей.\n" +
+                               "Завантажити зараз?",
+                        TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.Parse("#F0D890")), FontSize = 12,
+                    },
                 },
                 new TextBlock
                 {
